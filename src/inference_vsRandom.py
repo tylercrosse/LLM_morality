@@ -3,7 +3,7 @@ from transformers import pipeline, AutoTokenizer, AutoConfig, BitsAndBytesConfig
 from tqdm import tqdm
 import pandas as pd
 from torch import tensor, bfloat16, cuda
-from peft import LoraConfig
+from peft import LoraConfig, PeftModel
 
 tqdm.pandas()
 
@@ -999,7 +999,11 @@ print('successfully set bnb_config (will only be used for the ref model)')
 
 device = 'cuda' if cuda.is_available() else 'cpu'
 
-HF_HOME = '/models'
+DEFAULT_MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+DEFAULT_MODELS_DIR = os.path.abspath(DEFAULT_MODELS_DIR)
+HF_HOME = os.environ.get("LLM_MORALITY_MODELS_DIR")
+if not HF_HOME:
+    HF_HOME = "/models" if os.path.exists("/models") else DEFAULT_MODELS_DIR
 OUTPUT_DIR = f"/LLM_morality_output/EVAL{CD_tokens}vs{opponent_strategy_foreval}_samestate_order{order_CD}/"
 
 
@@ -1017,6 +1021,13 @@ if opponent_strategy_trained == 'LLM':
     model_dir += '_agentM'
     model_weights_dir += '_agentM'
 
+base_model_path = model_id
+if not (os.path.isabs(model_id) or os.path.exists(model_id)):
+    candidate_local = os.path.join(HF_HOME, model_name)
+    if os.path.exists(candidate_local):
+        base_model_path = candidate_local
+base_model_is_local = os.path.exists(base_model_path)
+
 
 #print('os.listdir(f{HF_HOME})')
 #os.listdir(f"{HF_HOME}")  
@@ -1029,32 +1040,66 @@ if not os.path.exists(f"{OUTPUT_DIR}/{model_dir}"):
 else: 
     print(f'saving files in existing model directory {model_dir}')
 
-try: 
+try:
     tokenizer = AutoTokenizer.from_pretrained(f"{HF_HOME}/{model_weights_dir}", local_files_only=True)
     print('successfully loaded tokenizer from disc via AutoTokenizer')
-except Exception as e: 
-    print('could not load tokenizer from disc, loadig from the web')
-    tokenizer = AutoTokenizer.from_pretrained(model_id, token=hf_token)
+except Exception:
+    if base_model_is_local:
+        tokenizer = AutoTokenizer.from_pretrained(base_model_path, local_files_only=True)
+        print('loaded tokenizer from local base model')
+    else:
+        print('could not load tokenizer from disc, loading from the web')
+        tokenizer = AutoTokenizer.from_pretrained(model_id, token=hf_token)
 tokenizer.pad_token = tokenizer.eos_token
 
 print('loaded tokenizer, now loading pre-trained model')
 #config = AutoConfig.from_pretrained(f"{HF_HOME}/{model_dir}") ##torch_dtype=torch.float16
 
-model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=f"{HF_HOME}/{model_weights_dir}", 
-                                             attn_implementation='eager',
-                                             quantization_config=bnb_config,
-                                             device_map={"": 0},
-                                             #token=hf_token
-                                             #config=config
-                                             )
+model_weights_path = os.path.join(HF_HOME, model_weights_dir)
+is_adapter = os.path.exists(os.path.join(model_weights_path, "adapter_config.json"))
+if is_adapter:
+    base_model_kwargs = dict(
+        attn_implementation='eager',
+        quantization_config=bnb_config,
+        device_map={"": 0},
+    )
+    if base_model_is_local:
+        base_model_kwargs["local_files_only"] = True
+    else:
+        base_model_kwargs["token"] = hf_token
+    base_model = AutoModelForCausalLM.from_pretrained(
+        pretrained_model_name_or_path=base_model_path,
+        **base_model_kwargs,
+    )
+    model = PeftModel.from_pretrained(
+        base_model,
+        model_weights_path,
+        local_files_only=True,
+    )
+else:
+    model = AutoModelForCausalLM.from_pretrained(
+        pretrained_model_name_or_path=model_weights_path,
+        attn_implementation='eager',
+        quantization_config=bnb_config,
+        device_map={"": 0},
+        local_files_only=True,
+    )
 print('successfully loaded model from disc')
 #print(model)
 
-ref_model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path = model_id,
-                                                 attn_implementation='eager',
-                                                 device_map={"": 0},
-                                                 quantization_config=bnb_config,
-                                                 )
+ref_model_kwargs = dict(
+    attn_implementation='eager',
+    device_map={"": 0},
+    quantization_config=bnb_config,
+)
+if base_model_is_local:
+    ref_model_kwargs["local_files_only"] = True
+else:
+    ref_model_kwargs["token"] = hf_token
+ref_model = AutoModelForCausalLM.from_pretrained(
+    pretrained_model_name_or_path=base_model_path,
+    **ref_model_kwargs,
+)
 #print(ref_model)
 print('successfully loaded ref model from disc')
 
@@ -3964,4 +4009,3 @@ else:
 
 
 print(f'FINISHED ALL EVAL, run{run_idx}')
-
