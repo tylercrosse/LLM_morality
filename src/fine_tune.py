@@ -680,8 +680,9 @@ print('successfully set run_name in wandb.init()')
 if not os.path.exists(f"{HF_HOME}/{model_name}"):
     model_pretrained = AutoModelForCausalLM.from_pretrained(model_id,
                                                             quantization_config=bnb_config,
-                                                            device_map={"": 0},
-                                                            token=hf_token
+                                                            device_map="auto",
+                                                            token=hf_token,
+                                                            low_cpu_mem_usage=True
                                                             )
     tokenizer = AutoTokenizer.from_pretrained(model_id, token=hf_token)
     tokenizer.pad_token = tokenizer.eos_token
@@ -698,24 +699,26 @@ if not os.path.exists(f"{HF_HOME}/{model_name}"):
 #### Load model ####
 ####################
 
-if model_id == 'gpt2': 
+if model_id == 'gpt2':
     model = AutoModelForCausalLMWithValueHead.from_pretrained(
         model_id,
         quantization_config=bnb_config,
-        device_map={"": 0},
+        device_map="auto",
         token=hf_token,
         is_trainable=True,
-        peft_config=lora_config
-        ).to(device)
-else: 
-    #load from disc - needed for Gemma 
+        peft_config=lora_config,
+        low_cpu_mem_usage=True
+        )
+else:
+    #load from disc - needed for Gemma
     model = AutoModelForCausalLMWithValueHead.from_pretrained(pretrained_model_name_or_path=f"{HF_HOME}/{model_name}",
                                                               attn_implementation='eager',
-                                                              device_map={"": 0},
+                                                              device_map="auto",
                                                               is_trainable=True,
                                                               peft_config=lora_config,
-                                                              quantization_config=bnb_config
-                                                              ).to(device)
+                                                              quantization_config=bnb_config,
+                                                              low_cpu_mem_usage=True
+                                                              )
     print(f'successfully instantiated AutoModelForCausalLMWithValueHead (quantised & using LoRA, rank {LoRA_rank})')
 #print_cuda_mem_usage(device, episode=0, toprint='  MEM usage after first model loading: ')
 
@@ -723,21 +726,23 @@ else:
 print_trainable_parameters(model)
 
 print('loading ref model')
-try: 
+try:
     ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(pretrained_model_name_or_path = model_id,
                                                               attn_implementation='eager',
-                                                              device_map={"": 0},
+                                                              device_map="auto",
                                                               is_trainable=False,
                                                               quantization_config=bnb_config,
+                                                              low_cpu_mem_usage=True
                                                               )
     print('successfully loaded ref model from disc')
-except Exception as e: 
+except Exception as e:
     ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(pretrained_model_name_or_path = f"{HF_HOME}/{model_name}",
                                                               attn_implementation='eager',
-                                                              device_map={"": 0},
+                                                              device_map="auto",
                                                               is_trainable=False,
                                                               quantization_config=bnb_config,
-                                                              )#.to(device)
+                                                              low_cpu_mem_usage=True
+                                                              )
     print('loaded ref model from the web')
 #ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_pretrained,
 #                                                device_map={"": 0},
@@ -1186,10 +1191,9 @@ if do_PART2:
         #query_text = generate_IPD_query(prev_move_M, prev_move_opp, model_name, C_str, D_str, RN_stream_1, RN_stream_2)
         query_text = generate_IPD_query(prev_move_M, prev_move_opp, model_name, C_placeholder, D_placeholder, RN_stream_1, RN_stream_2)
         queries_text.append(query_text)
-        
+
         # Tokenize input query
         query_input_tensors = tokenizer(query_text, return_tensors="pt", add_special_tokens=False)['input_ids'].to(device)
-        queries_text.append(query_text)
         if i == 0: 
             with open (f"{OUTPUT_DIR}/IPD_eval_prompt_iter1.txt", 'w') as f: 
                 f.write(query_text)

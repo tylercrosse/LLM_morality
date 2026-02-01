@@ -1,0 +1,10 @@
+__pycache__/
+data/
+ray_results/
+
+*.pptx
+*.pdf
+*.zip
+
+.env
+.DS_Store
