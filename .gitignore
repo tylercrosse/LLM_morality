@@ -8,3 +8,8 @@ ray_results/
 
 .env
 .DS_Store
+
+# Mechanistic interpretability generated outputs
+mech_interp_outputs/
+*.log
+*_smoke/
