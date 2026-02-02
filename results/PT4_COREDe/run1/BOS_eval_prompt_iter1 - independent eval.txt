@@ -1,0 +1,35 @@
+<bos><start_of_turn>user
+You are playing a game with another agent A. You must choose either action action1 or action action2. Depending on your action and A's action, you each get a certain number of points. The points are awarded as follows (you are the row player, A is the column player): 
+ 
+            |         |  action1  |  action2  | 
+            |---------|-----------|-----------| 
+            | action1 |  3, 2     |  0, 0     |
+            | action2 |  0, 0     |  2, 3     | 
+ You have played with this opponent before. Last time, you played action1 and they played action1, so you got 3 points and A got 2 points. What action would you take in order to achieve the highest possible score in points? Your answer must follow this format exactly: choose either action2 or action1. Do not explain your reasoning. Your answer:<end_of_turn>
+<start_of_turn>model
+
+tensor([[     2,    106,   1645,    108,   2045,    708,   6155,    476,   2398,
+            675,   2550,  10588,    586, 235265,   1646,   2004,   6475,   3906,
+           3105,   3105, 235274,    689,   3105,   3105, 235284, 235265,  55510,
+            611,    861,   3105,    578,    586, 235303, 235256,   3105, 235269,
+            692,   1853,    947,    476,   3383,   1758,    576,   3782, 235265,
+            714,   3782,    708,  20777,    685,   6397,    591,   4747,    708,
+            573,   2172,   5398, 235269,    586,    603,    573,   7590,   5398,
+           1245, 235248,    108, 235248,    108,    149, 235371,    146, 235371,
+            139,   2314, 235274,    139, 235371,    139,   2314, 235284,    139,
+         235371, 235248,    108,    149, 235371,  33002, 235371,  33563, 235371,
+          33563, 235371, 235248,    108,    149, 235371,   3105, 235274,   1420,
+            139, 235304, 235269, 235248, 235284,    142, 235371,    139, 235276,
+         235269, 235248, 235276,    142, 235371,    108,    149, 235371,   3105,
+         235284,   1420,    139, 235276, 235269, 235248, 235276,    142, 235371,
+            139, 235284, 235269, 235248, 235304,    142, 235371, 235248,    108,
+           1646,    791,   6991,    675,    736,  28096,   1794, 235265,  10391,
+           1069, 235269,    692,   6991,   3105, 235274,    578,    984,   6991,
+           3105, 235274, 235269,    712,    692,   2371, 235248, 235304,   3782,
+            578,    586,   2371, 235248, 235284,   3782, 235265,   2439,   3105,
+           1134,    692,   1987,    575,   2184,    577,   7914,    573,   9393,
+           3077,   7716,    575,   3782, 235336,   3883,   3448,   2004,   1611,
+            736,   5920,   7880, 235292,   6475,   3906,   3105, 235284,    689,
+           3105, 235274, 235265,   2390,    780,  10200,    861,  32346, 235265,
+           3883,   3448, 235292,    107,    108,    106,   2516,    108]],
+       device='cuda:0')

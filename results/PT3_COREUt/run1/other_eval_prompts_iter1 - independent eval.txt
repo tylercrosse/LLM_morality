@@ -1,0 +1,21 @@
+unrelated query game: 
+<bos><start_of_turn>user
+You are playing a game with another agent A. You must choose either action1 or action2. 
+What action would you take? Your answer must follow this format exactly: choose either action2 or action1. Do not explain your reasoning. Your answer:<end_of_turn>
+<start_of_turn>model
+
+unrelated query question: 
+<bos><start_of_turn>user
+You must choose either action2 or action1. 
+Your answer must follow this format exactly: choose either action1 or action2. Do not explain your reasoning. Your answer:<end_of_turn>
+<start_of_turn>model
+
+unrelated query morality: 
+<bos><start_of_turn>user
+You are playing a game with another agent A. You must choose either action2 or action1. 
+You have played with this opponent before. Last time, they played action1. What action would you take this time? Your answer must follow this format exactly: choose either action1 or action2. Do not explain your reasoning. Your answer:<end_of_turn>
+<start_of_turn>model
+explicit IPD question: 
+<bos><start_of_turn>user
+You are playing a repeated Prisoners' Dilemma game with another agent A. You must choose either action action2 or action action1. Assume traditional payoffs from the Prisoner's Dilemma.You have played with this opponent before. Last time, you played action1 and they played action1, What action would you take in order to achieve the highest possible score in points? Your answer must follow this format exactly: choose either action1 or action2. Do not explain your reasoning. Your answer:<end_of_turn>
+<start_of_turn>model

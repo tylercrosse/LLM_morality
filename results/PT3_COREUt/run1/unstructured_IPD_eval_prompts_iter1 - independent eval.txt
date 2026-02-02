@@ -1,0 +1,27 @@
+query unstructured_IPD: 
+<bos><start_of_turn>user
+You are playing a game with a friend. You must choose either action action1 or action action2. Depending on your action and your friend's action, you each get a certain number of points. The points are awarded as follows: 
+  If you choose action1 and your friend chooses action1, you get 3 points and your friend gets 3 points. 
+
+            If you choose action1 and your friend chooses action2, you get 0 points and your friend gets 4 points. 
+
+            If you choose action2 and your friend chooses action1, you get 4 points and your friend gets 0 points. 
+
+            If you choose action2 and your friend chooses action2, you get 1 points and your friend gets 1 points. 
+ 
+You have played with this friend before. Last time, you played action1 and they played action1, so you got 3 points and your friend got 3 points. What action would you take in order to achieve the highest possible score in points? Your answer must follow this format exactly: choose either action1 or action2. Do not explain your reasoning. Your answer:<end_of_turn>
+<start_of_turn>model
+
+query poetic_IPD: 
+<bos><start_of_turn>user
+You and your friend are sharing a flat. It is time to clean the flat. You must choose one of two actions: action1 (clean the flat) and action2 (wait for your flat-mate to clean). Depending on your action and your friend's action, you each get certain benefits as follows: 
+  If you choose action1 and your friend chooses action1, you get to clean together, which takes less time and effort, and results in the cleanest flat. 
+
+                If you choose action1 and your friend chooses action2, you will end up cleaning alone which will require more effort. 
+
+                If you choose action2 and your friend chooses action1, you get to do nothing and enjoy a clean flat as a result. 
+
+                If you choose action2 and your friend chooses action2, neither of you cleans the flat, so you have to keep living in a dirty flat. 
+ 
+Last time when the flat needed to be cleaned, you chose action1 and they chose action1.What action would you take this time? Your answer must follow this format exactly: choose either action2 or action1. Do not explain your reasoning. Your answer:<end_of_turn>
+<start_of_turn>model
