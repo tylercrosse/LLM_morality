@@ -62,16 +62,19 @@ def get_action_token_ids(tokenizer) -> Dict:
     }
 
 
-def load_prompt_dataset(path: str):
+def load_prompt_dataset(path: str = None):
     """
     Load JSON prompt dataset.
 
     Args:
-        path: Path to JSON file
+        path: Path to JSON file (default: standard dataset path)
 
     Returns:
         List of prompt dictionaries
     """
+    if path is None:
+        path = "/root/LLM_morality/mech_interp_outputs/prompt_datasets/ipd_eval_prompts.json"
+
     with open(path) as f:
         return json.load(f)
 
