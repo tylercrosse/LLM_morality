@@ -4,7 +4,6 @@ models/
 ray_results/
 
 *.pptx
-*.pdf
 *.zip
 
 .env
