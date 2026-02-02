@@ -57,7 +57,13 @@ class HookedGemmaModel:
             def make_attn_hook(idx):
                 def hook(module, input, output):
                     # output[0] is attention output before residual connection
+                    # output[1] is attention weights (if return_attention_weights=True)
                     self.cache[f"blocks.{idx}.hook_attn_out"] = output[0].detach()
+
+                    # Cache attention weights if available
+                    if len(output) > 1 and output[1] is not None:
+                        self.cache[f"model.layers.{idx}.self_attn.attn_weights"] = output[1].detach()
+
                     return output
 
                 return hook
@@ -82,12 +88,14 @@ class HookedGemmaModel:
             handle.remove()
         self.hooks.clear()
 
-    def run_with_cache(self, input_ids):
+    def run_with_cache(self, input_ids, output_attentions=False):
         """
         Run forward pass and return logits + cached activations.
 
         Args:
             input_ids: Input token IDs
+            output_attentions: Whether to output attention weights
+                Note: Requires model loaded with attn_implementation="eager"
 
         Returns:
             logits: Model output logits
@@ -96,8 +104,15 @@ class HookedGemmaModel:
         self.register_cache_hooks()
 
         with torch.no_grad():
-            outputs = self.model(input_ids)
+            outputs = self.model(input_ids, output_attentions=output_attentions)
             logits = outputs.logits
+
+            # Cache attention weights if requested
+            if output_attentions and hasattr(outputs, 'attentions') and outputs.attentions is not None:
+                for layer_idx, attn_weights in enumerate(outputs.attentions):
+                    # attn_weights shape: (batch, num_heads, seq_len, seq_len)
+                    if attn_weights is not None:
+                        self.cache[f"model.layers.{layer_idx}.self_attn.attn_weights"] = attn_weights.detach()
 
         # Get embedding matrix for logit lens (W_U) and final layer norm
         self.W_U = self.model.lm_head.weight.detach()  # (vocab_size, d_model)
@@ -146,6 +161,7 @@ class LoRAModelLoader:
         model_id: str,
         device: str = "cuda",
         dtype: torch.dtype = torch.bfloat16,
+        attn_implementation: str = "eager",
     ):
         """
         Load HuggingFace model with optional LoRA adapter.
@@ -154,6 +170,8 @@ class LoRAModelLoader:
             model_id: Model identifier ('base', 'PT2_COREDe', etc.)
             device: Device to load model on ('cuda' or 'cpu')
             dtype: Model dtype (default: bfloat16 for efficiency)
+            attn_implementation: Attention implementation ('eager' or 'sdpa')
+                Use 'eager' for attention analysis (supports output_attentions)
 
         Returns:
             Loaded (and potentially LoRA-merged) HuggingFace model
@@ -165,6 +183,7 @@ class LoRAModelLoader:
             torch_dtype=dtype,
             device_map=device,
             trust_remote_code=True,
+            attn_implementation=attn_implementation,
         )
 
         # If not base model, load LoRA adapter and merge
@@ -193,6 +212,7 @@ class LoRAModelLoader:
         model_id: str,
         device: str = "cuda",
         dtype: torch.dtype = torch.bfloat16,
+        attn_implementation: str = "eager",
     ) -> HookedGemmaModel:
         """
         Load model with activation caching support.
@@ -201,12 +221,16 @@ class LoRAModelLoader:
             model_id: Model identifier ('base', 'PT2_COREDe', etc.)
             device: Device to load model on
             dtype: Model dtype
+            attn_implementation: Attention implementation ('eager' or 'sdpa')
+                Default 'eager' for compatibility with attention analysis
 
         Returns:
             HookedGemmaModel with activation caching
         """
         # Load HuggingFace model (with LoRA merged if applicable)
-        hf_model = LoRAModelLoader.load_base_hf_model(model_id, device, dtype)
+        hf_model = LoRAModelLoader.load_base_hf_model(
+            model_id, device, dtype, attn_implementation=attn_implementation
+        )
         tokenizer = LoRAModelLoader.load_tokenizer()
 
         print(f"Creating hooked model wrapper for {model_id}...")

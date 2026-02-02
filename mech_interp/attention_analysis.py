@@ -93,7 +93,7 @@ class AttentionAnalyzer:
 
         # Run forward pass with cache to get attention weights
         with torch.no_grad():
-            _, cache = self.model.run_with_cache(input_ids)
+            _, cache = self.model.run_with_cache(input_ids, output_attentions=True)
 
         # Extract attention patterns
         # Cache keys: "model.layers.{layer}.self_attn.attn_weights"
@@ -107,7 +107,8 @@ class AttentionAnalyzer:
             attn_key = f"model.layers.{layer}.self_attn.attn_weights"
             if attn_key in cache:
                 # Shape: (batch, num_heads, seq_len, seq_len)
-                attn_weights = cache[attn_key][0].cpu().numpy()  # Remove batch dim
+                # Convert to float32 first (numpy doesn't support bfloat16)
+                attn_weights = cache[attn_key][0].float().cpu().numpy()  # Remove batch dim
                 attention_patterns[layer] = attn_weights
 
         # Get final token attention (what the last token attends to)

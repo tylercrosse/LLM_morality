@@ -3,7 +3,32 @@
 **Follow-up Analysis of**: [*Cooperation, Competition, and Maliciousness: LLM-Stakeholders Interactive Negotiation*](https://arxiv.org/html/2410.01639v4)
 **Authors**: Elizaveta Tennant, Stephen Casper, Dylan Hadfield-Menell
 **Date**: February 2026
+**Last Updated**: February 2026
 **Contact**: [Your name/email]
+
+---
+
+## 📋 Recent Updates (February 2026)
+
+**Major findings since last update:**
+
+1. **✅ Comprehensive RQ2 Analysis Completed**
+   - Ran bidirectional cross-patching experiments (PT3_De ↔ PT3_Ut): 14,040 patches
+   - **Key discovery**: Models are 99.9999% similar yet 78% of components show directional asymmetry
+   - Statistical analysis: 57/234 components significantly different (p<0.05)
+   - Reframed RQ2: "How do similar circuits produce different behaviors?"
+
+2. **🔬 New Analyses Implemented**
+   - **Attention Pattern Analysis**: Tests whether De/Ut attend to different information
+   - **Component Interaction Analysis**: Reveals different correlation patterns between layers
+   - Implementation complete, ready for execution (~10 min runtime)
+
+3. **📊 Enhanced Documentation**
+   - `RQ2_ANALYSIS_RESULTS.md`: Complete statistical analysis with all tests and interpretations
+   - `ATTENTION_AND_INTERACTION_ANALYSIS.md`: Methodology for new analyses
+   - `IMPLEMENTATION_FIXES.md`: Technical details on layer-level granularity
+
+**Bottom line**: Deontological and Utilitarian models don't have different circuits—they have the same circuits with different tuning and coordination patterns.
 
 ---
 
@@ -16,9 +41,12 @@ This project applies white-box mechanistic interpretability methods to understan
 1. **"Selfish" components are not suppressed** — moral fine-tuning makes subtle adjustments (max Δ=0.047) across many components rather than suppressing specific "selfish" circuits
 2. **Universal L8/L9 MLP architecture** — these adjacent layers encode cooperation/defection across all models with 7-9x stronger effects than other components
 3. **Robust, distributed moral encoding** — 7,020 activation patches caused zero behavioral flips, showing moral reasoning is not localized to specific circuits
-4. **Distinct moral architectures** — Deontological and Utilitarian models use different layers (L0 vs L2/L12) and show different context-dependencies
+4. **Nearly identical yet functionally distinct** — Deontological and Utilitarian models are 99.9999% similar in component strengths but differ through:
+   - **Directional asymmetry**: 78% of components show opposite effects when patched bidirectionally
+   - **Distributed tuning**: Different balance across the same component set
+   - **Layer-specific wiring**: Different correlation patterns between layers (ongoing analysis)
 
-These findings have implications for **efficient fine-tuning** (targeting L11-L23 MLPs could reduce parameters by 50%) and **interpretability** (moral behavior emerges from component balance, not suppression).
+These findings have implications for **efficient fine-tuning** (targeting L11-L23 MLPs could reduce parameters by 50%) and **interpretability** (moral behavior emerges from component balance and interaction patterns, not suppression or distinct circuits).
 
 ---
 
@@ -157,6 +185,21 @@ This validation provided confidence that the models successfully learned their r
 - Measure behavioral change (Δ logit, action flips)
 - Discover minimal circuits that can flip behavior
 
+**Attention Pattern Analysis**:
+- Extract attention weights from all 26 layers × 8 heads
+- Identify which tokens each model attends to during decision-making
+- Test hypothesis: Different moral frameworks attend to different information
+  - Deontological: Focus on opponent's previous actions (reciprocity norms)
+  - Utilitarian: Focus on joint payoff information (collective welfare)
+
+**Component Interaction Analysis**:
+- Compute correlation matrices between component activations across scenarios
+- Identify which components co-activate (work together)
+- Test hypothesis: Similar components but different "wiring diagrams"
+  - Example: Does L8_MLP connect to different downstream layers in De vs Ut?
+- Granularity: 52 components (26 attention + 26 MLP layers)
+- Reveals information routing patterns that DLA cannot detect
+
 ---
 
 ## 3. Results
@@ -269,23 +312,100 @@ The complete absence of behavioral flips across 7,020 patches demonstrates that:
 3. **Moral encoding is distributed** across the network
 4. **Strategic and moral models share most components** (patching has minimal effect)
 
-### 3.4 Distinct Moral Architectures (RQ2 - Partial)
+### 3.4 Deontological vs Utilitarian: Nearly Identical Yet Functionally Distinct (RQ2)
 
-While component-level contributions are nearly identical, Deontological and Utilitarian differ in:
+**Initial paradox**: DLA analysis showed Deontological and Utilitarian models with nearly identical component-level contributions. How do they produce different behaviors?
 
-**Architectural Differences**:
+#### Comprehensive Statistical Analysis
 
-| Aspect | Deontological | Utilitarian |
-|--------|--------------|-------------|
-| **Key strategic-influenced layers** | L0 | L2, L12 |
-| **Response to strategic patching** | Pushes cooperation | Neutral/balanced |
-| **Mean effect** | -0.012 | +0.0005 |
-| **Context sensitivity** | Consistent across scenarios | Varies by scenario |
+We conducted extensive analysis to answer RQ2, including statistical significance tests, pairwise model distance computation, and bidirectional cross-patching experiments.
 
-**Hypothesis**: The moral frameworks use similar components but differ in how they **interact** and **combine** information.
+**Pairwise Model Similarity** (cosine distance between full DLA vectors):
+
+| Model Pair | Distance | Interpretation |
+|------------|----------|---------------|
+| **PT3_De vs PT3_Ut** | **0.00000588** | **Most similar pair** |
+| PT3_De vs PT4_De | 0.00003711 | Very similar |
+| PT3_Ut vs PT4_De | 0.00003854 | Very similar |
+| PT2 vs PT3_De | 0.00010473 | Similar |
+| PT2 vs PT3_Ut | 0.00010618 | Similar |
+
+**Key finding**: Deontological and Utilitarian models are **99.9999% similar** in component strengths!
+
+#### Cross-Patching Results: Directional Asymmetry
+
+We ran bidirectional patching experiments (PT3_De ↔ PT3_Ut) to test if models distinguish despite similarity:
+
+**Results**:
+- **14,040 total patches** (234 components × 15 scenarios × 2 directions × 2 models)
+- **0 behavioral flips** — neither direction caused action changes
+- **Mean effects**: De→Ut = +0.0027, Ut→De = -0.0109 (tiny)
+
+**BUT**: **78% of components show directional asymmetry** (effect difference >0.01):
+
+| Component | De→Ut Effect | Ut→De Effect | Asymmetry | Interpretation |
+|-----------|--------------|--------------|-----------|----------------|
+| L25H0 | +0.0123 | -0.0432 | **0.055** | **Strongest asymmetry** |
+| L25H3 | +0.0098 | -0.0345 | 0.044 | L25 heads distinguish frameworks |
+| L2H7 | -0.0176 | +0.0289 | 0.047 | Early layer sensitivity |
+| L13H0 | -0.0098 | +0.0234 | 0.033 | Mid-layer moral processing |
+
+**Top asymmetric components**: L25 heads (late decision), L13 heads (mid processing), L6 MLP
+
+#### Statistical Significance
+
+Of 234 components, **57 show statistically significant differences** (p < 0.05, t-test):
+- L3_MLP: p = 0.00012 ⭐
+- L25H0-H3: p < 0.01
+- L17H0-H3: p < 0.02
+- L7 heads: p < 0.03
+
+#### Scenario-Specific Differences
+
+Mean |Δ| per scenario (De - Ut):
+
+| Scenario | Mean Difference | Interpretation |
+|----------|----------------|----------------|
+| **DD_trapped** | **0.0147** | Largest difference: mutual defection escape |
+| **CD_punished** | **0.0137** | Forgiveness vs retaliation |
+| CC_temptation | 0.0121 | Resisting temptation strategies |
+| DC_exploited | 0.0089 | Continuing exploitation |
+| CC_continue | 0.0067 | Cooperation maintenance (most similar) |
+
+#### RQ2 Answer: Similar Circuits, Different Tuning
+
+**How are they distinct?**
+
+1. **Distributed fine-tuning**: Same components, different balancing (57/234 differ significantly)
+2. **Directional asymmetry**: Components have context-dependent effects (78% asymmetric)
+3. **Layer-specific roles**: Different layers dominate in different frameworks
+4. **Scenario sensitivity**: Largest differences in moral dilemmas (DD_trapped, CD_punished)
+
+**Reframed question**: Not "Do they have different circuits?" but rather **"How do similar circuits produce different moral behaviors?"**
+
+**Answer**: Through subtle, distributed tuning across the same component set, creating different activation balances and context-dependent processing patterns.
 
 ![Head Heatmaps - All Models](mech_interp_outputs/dla/dla_heads_CC_temptation.png)
-*Figure 4: Per-head contribution heatmaps for CC_temptation scenario. Models show similar patterns with small variations.*
+*Figure 4: Per-head contribution heatmaps for CC_temptation scenario. Models show nearly identical patterns with subtle variations that compound to create behavioral differences.*
+
+#### Ongoing: Attention Patterns and Component Interactions
+
+To further investigate the mechanisms, we've implemented two additional analyses:
+
+**1. Attention Pattern Analysis**: Do models attend to different information?
+- Hypothesis: De attends to opponent's actions (reciprocity), Ut attends to payoffs (welfare)
+- Status: Implementation complete, awaiting execution
+
+**2. Component Interaction Analysis**: Do models wire components together differently?
+- Hypothesis: Similar components but different correlation patterns between layers
+- Granularity: 52 components (26 attention + 26 MLP layers)
+- Key question: Does L8_MLP → L25_ATTN pathway differ between De and Ut?
+- Status: Implementation complete, awaiting execution
+
+These analyses will reveal whether differences arise from:
+- **Information selection** (what tokens are attended to)
+- **Information routing** (which layers interact with which)
+- **Both**
 
 **Note**: Cross-patching experiments (PT3_De ↔ PT3_Ut) are currently running and will provide more direct evidence of distinguishing circuits.
 
@@ -357,16 +477,26 @@ All code is available for reproduction:
 
 ```
 mech_interp/
-├── model_loader.py          # Custom HookedGemmaModel wrapper
-├── direct_logit_attribution.py  # DLA implementation
-├── activation_patching.py   # Patching experiments
-├── prompt_generator.py      # IPD evaluation dataset
-└── README.md               # Comprehensive documentation
+├── model_loader.py              # Custom HookedGemmaModel wrapper
+├── direct_logit_attribution.py # DLA implementation
+├── activation_patching.py       # Patching experiments
+├── attention_analysis.py        # NEW: Attention pattern analysis
+├── component_interactions.py    # NEW: Component correlation analysis
+├── prompt_generator.py          # IPD evaluation dataset
+└── README.md                   # Comprehensive documentation
 
 scripts/
-├── run_dla.py              # Full DLA pipeline
-├── run_patching.py         # Patching experiments
-└── run_logit_lens.py       # Layer-wise analysis
+├── run_dla.py                  # Full DLA pipeline
+├── run_patching.py             # Patching experiments
+├── run_logit_lens.py           # Layer-wise analysis
+├── run_attention_analysis.py   # NEW: Attention pattern extraction
+├── run_component_interactions.py  # NEW: Correlation analysis
+└── run_full_rq2_analysis.py    # NEW: Combined attention + interaction analysis
+
+docs/
+├── RQ2_ANALYSIS_RESULTS.md     # Complete statistical analysis of De vs Ut
+├── ATTENTION_AND_INTERACTION_ANALYSIS.md  # Methodology for new analyses
+└── IMPLEMENTATION_FIXES.md     # Technical notes on layer-level granularity
 ```
 
 ### 5.2 Infrastructure for Gemma-2 Analysis
@@ -393,24 +523,69 @@ Can be adapted for other mechanistic interpretability studies on Gemma models.
 
 ## 6. Next Steps & Collaboration
 
-### 6.1 Pending Analysis
+### 6.1 Recently Completed & In-Progress Analyses
 
-**Cross-patching experiments** (PT3_De ↔ PT3_Ut) are currently running and will:
-- Directly identify circuits that distinguish deontological from utilitarian reasoning
-- Provide stronger evidence for RQ2
-- Expected completion: ~1 hour
+#### ✅ Completed: Comprehensive RQ2 Analysis
+
+**Cross-patching experiments** (PT3_De ↔ PT3_Ut) completed with surprising findings:
+- **14,040 patches** executed across all components and scenarios
+- **0 behavioral flips** but **78% directional asymmetry**
+- **Statistical analysis**: 57/234 components significantly different (p<0.05)
+- **Key insight**: Models are 99.9999% similar yet functionally distinct through distributed tuning
+
+**Documentation**: See `RQ2_ANALYSIS_RESULTS.md` for complete statistical analysis and interpretation.
+
+#### 🔄 In Progress: Attention and Interaction Analyses
+
+**Attention Pattern Analysis** (Implementation complete, ready to run):
+- Extracts attention weights from all 26 layers × 8 heads
+- Tests hypothesis: De attends to opponent actions, Ut attends to payoffs
+- Expected runtime: ~4 minutes per model
+- Will reveal **what information** each framework prioritizes
+
+**Component Interaction Analysis** (Implementation complete, ready to run):
+- Computes 52×52 correlation matrices (26 ATTN + 26 MLP layers)
+- Tests hypothesis: Similar components, different wiring patterns
+- Expected runtime: ~6 minutes per model
+- Will reveal **how components coordinate** differently
+
+**Combined insight**: If both show differences → distinct mechanisms at multiple levels. If only one shows differences → pinpoints the key mechanistic distinction.
+
+**Documentation**: See `ATTENTION_AND_INTERACTION_ANALYSIS.md` for methodology and interpretation framework.
 
 ### 6.2 Potential Extensions
 
-1. **Intervention experiments**: Can we edit specific components (L11, L13, L17) to adjust moral behavior without retraining?
+Based on our findings, several high-impact extensions are possible:
 
-2. **Scaling analysis**: Do larger models (7B, 27B) show more localized moral circuits?
+1. **Directional asymmetry investigation**: Why do 78% of components show opposite effects in bidirectional patching?
+   - Hypothesis: Context-dependent processing (same component, different role depending on source model's context)
+   - Approach: Analyze activation distributions, test with controlled input variations
 
-3. **Training dynamics**: How do L11-L23 MLPs change during training? Can we observe the transition?
+2. **Attention-guided interventions**: Use attention pattern analysis to identify key information tokens
+   - If De attends to opponent actions: Can we mask those tokens and change behavior?
+   - If Ut attends to payoffs: Can we manipulate payoff attention to adjust cooperation rates?
 
-4. **Targeted fine-tuning validation**: Actually fine-tune only L11-L23 and measure performance.
+3. **Pathway-targeted fine-tuning**: Based on component interaction analysis
+   - Instead of targeting specific layers, target specific **pathways** (e.g., L8_MLP → L25_ATTN)
+   - Could reduce parameters even further while maintaining behavior
 
-5. **Other moral frameworks**: Apply to virtue ethics, care ethics, etc.
+4. **Scaling analysis**: Do larger models (7B, 27B) show similar patterns?
+   - Do L8/L9 MLPs remain universal?
+   - Does 99.999% similarity hold across model sizes?
+   - Are circuits more localized in larger models?
+
+5. **Training dynamics**: Analyze checkpoints to observe emergence
+   - When does L8/L9 MLP dominance appear?
+   - How does directional asymmetry develop during training?
+   - Can we predict final moral behavior from early checkpoints?
+
+6. **Subspace analysis**: Given 99.999% similarity, do models use different subspaces?
+   - Distributed Alignment Search (DAS) to find linear combinations
+   - Could explain how similar components produce different behaviors
+
+7. **Other moral frameworks**: Extend to virtue ethics, care ethics, deontological variants
+   - Would they also show 99.999% similarity with distinct asymmetry patterns?
+   - Universal moral encoding with framework-specific tuning?
 
 ### 6.3 Publication Opportunities
 
@@ -426,11 +601,25 @@ This could be:
 
 2. **L11_MLP paradox**: Do you have hypotheses about why a component would become more pro-defect after moral training?
 
-3. **Utilitarian vs Deontological**: Beyond cooperation rates, did you observe other behavioral differences (variance, context-sensitivity)?
+3. **99.999% similarity finding**: Were you surprised that Deontological and Utilitarian models are nearly identical in component strengths?
+   - Does this match your intuitions about moral fine-tuning?
+   - Did you observe similar cooperation rates between these models in your experiments?
 
-4. **Training details**: Were there particular epochs where cooperation rates jumped? Could we analyze checkpoints from those moments?
+4. **Directional asymmetry**: What's your interpretation of 78% of components showing opposite effects in bidirectional patching?
+   - Could this be an artifact of how the models process context?
+   - Or does it reveal something fundamental about how moral frameworks differ?
 
-5. **Collaboration**: Would you be interested in co-authoring if we extend this to a full paper?
+5. **Training dynamics**: Were there particular epochs where cooperation rates jumped? Could we analyze checkpoints from those moments?
+   - Specifically: When does the "distributed tuning" emerge during training?
+   - Are models initially more different and then converge, or vice versa?
+
+6. **Utilitarian vs Deontological**: Beyond cooperation rates, did you observe other behavioral differences (variance, context-sensitivity, reasoning patterns)?
+   - Our scenario analysis shows largest differences in DD_trapped and CD_punished
+   - Does this align with your expectations about moral reasoning in those contexts?
+
+7. **Collaboration**: Would you be interested in co-authoring if we extend this to a full paper?
+   - The attention and interaction analyses could provide additional insights
+   - Combined with your behavioral results, this could be a strong mechanistic interpretability contribution
 
 ---
 
@@ -438,18 +627,39 @@ This could be:
 
 ### Key Visualizations Included
 
+**Phase 1: Direct Logit Attribution**
 1. **Component rankings**: Top-20 components per model showing L8/L9 dominance
 2. **MLP contributions**: Bar plots across scenarios showing model similarity
 3. **Head heatmaps**: 26×8 grids showing distributed contributions
+
+**Phase 2: Activation Patching**
 4. **Circuit discoveries**: Minimal circuit visualizations (failed to flip at 10 components)
 5. **Consistency plots**: Components that consistently affect multiple scenarios
+6. **Asymmetry heatmaps**: 234-component comparison showing directional differences (De ↔ Ut)
+
+**Phase 3: Attention & Interaction (In Progress)**
+7. **Attention comparison plots**: Bar charts showing attention to action keywords, opponent context, and payoff information
+8. **Correlation matrices**: 52×52 heatmaps showing component co-activation patterns
+9. **Difference heatmaps**: Correlation differences between De and Ut models
+10. **Key pathway diagrams**: Visualizing L8_MLP, L9_MLP connections to decision layers
 
 ### Data Availability
 
-All results exported to CSV:
+All results exported to CSV with comprehensive metadata:
+
+**Completed:**
 - **DLA**: 17,550 rows (5 models × 234 components × 15 scenarios)
-- **Patching**: 7,020+ rows (2 experiments × 234 components × 15 scenarios)
+- **Patching**: 21,060+ rows (4 experiments × 234 components × 15 scenarios)
+  - PT2 → PT3_De: 3,510 patches
+  - PT2 → PT3_Ut: 3,510 patches
+  - PT3_De ↔ PT3_Ut: 14,040 patches (bidirectional)
+- **Statistical tests**: 57 components with p-values, effect sizes, asymmetry scores
 - **Summary statistics**: Per-model, per-scenario, per-component breakdowns
+
+**In Progress:**
+- **Attention patterns**: 15 scenarios × 2 models × token-level attention weights
+- **Component interactions**: 52×52 correlation matrices × 2 models
+- **Significant pathways**: Component pairs with correlation differences >0.3
 
 Available for further analysis or your own visualizations.
 

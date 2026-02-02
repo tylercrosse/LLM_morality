@@ -71,7 +71,9 @@ class ComponentInteractionAnalyzer:
         self.tokenizer = LoRAModelLoader.load_tokenizer()
 
         # Get action token IDs
-        self.c_token, self.d_token = get_action_token_ids(self.tokenizer)
+        action_tokens = get_action_token_ids(self.tokenizer)
+        self.c_token = action_tokens["C"]
+        self.d_token = action_tokens["D"]
 
     def extract_component_activations(
         self,
@@ -101,25 +103,23 @@ class ComponentInteractionAnalyzer:
         final_pos = input_ids.shape[1] - 1
         component_activations = {}
 
-        # Extract attention head activations
+        # Extract attention and MLP activations for each layer
+        # Note: HookedGemmaModel provides full attention output, not per-head
+        # We use layer-level granularity for correlation analysis
         for layer in range(26):
-            head_key = f"model.layers.{layer}.self_attn.head_out"
-            if head_key in cache:
-                # Shape: (batch, seq_len, num_heads, head_dim)
-                head_out = cache[head_key][0, final_pos]  # (num_heads, head_dim)
+            # Attention output
+            attn_key = f"blocks.{layer}.hook_attn_out"
+            if attn_key in cache:
+                # Shape: (batch, seq_len, d_model)
+                attn_out = cache[attn_key][0, final_pos]  # (d_model,)
+                magnitude = float(torch.norm(attn_out, p=2).cpu())
+                component_activations[f"L{layer}_ATTN"] = magnitude
 
-                for head in range(8):
-                    head_activation = head_out[head]  # (head_dim,)
-                    # Use L2 norm as activation magnitude
-                    magnitude = float(torch.norm(head_activation, p=2).cpu())
-                    component_activations[f"L{layer}H{head}"] = magnitude
-
-        # Extract MLP activations
-        for layer in range(26):
-            mlp_key = f"model.layers.{layer}.mlp.output"
+            # MLP output
+            mlp_key = f"blocks.{layer}.hook_mlp_out"
             if mlp_key in cache:
-                # Shape: (batch, seq_len, hidden_dim)
-                mlp_out = cache[mlp_key][0, final_pos]  # (hidden_dim,)
+                # Shape: (batch, seq_len, d_model)
+                mlp_out = cache[mlp_key][0, final_pos]  # (d_model,)
                 magnitude = float(torch.norm(mlp_out, p=2).cpu())
                 component_activations[f"L{layer}_MLP"] = magnitude
 
