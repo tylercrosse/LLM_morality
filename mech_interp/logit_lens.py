@@ -13,12 +13,16 @@ from typing import Dict, List, Tuple
 
 from mech_interp.model_loader import HookedGemmaModel
 from mech_interp.utils import get_action_token_ids, MODEL_LABELS, MODEL_COLORS
+from mech_interp.decision_metrics import (
+    prepare_prompt,
+    compute_action_sequence_preference as compute_action_sequence_preference_shared,
+)
 
 
 class LogitLensAnalyzer:
     """Logit lens analysis for mechanistic interpretability."""
 
-    def __init__(self, model: HookedGemmaModel, tokenizer):
+    def __init__(self, model: HookedGemmaModel, tokenizer, use_chat_template: bool = True):
         """
         Initialize logit lens analyzer.
 
@@ -28,7 +32,48 @@ class LogitLensAnalyzer:
         """
         self.model = model
         self.tokenizer = tokenizer
+        self.use_chat_template = use_chat_template
         self.action_tokens = get_action_token_ids(tokenizer)
+
+    def _prepare_prompt(self, prompt: str) -> str:
+        """Mirror inference formatting by using Gemma chat templating."""
+        return prepare_prompt(
+            self.tokenizer,
+            prompt,
+            use_chat_template=self.use_chat_template,
+        )
+
+    def compute_action_sequence_preference(
+        self,
+        prompt: str,
+        action1_label: str = "action1",
+        action2_label: str = "action2",
+    ) -> Dict[str, float]:
+        """
+        Compare full sequence probabilities for action1 vs action2.
+
+        Returns:
+            Dictionary with log-probabilities and normalized two-way probabilities.
+        """
+        prepared_prompt = self._prepare_prompt(prompt)
+        input_ids = self.tokenizer(prepared_prompt, return_tensors="pt").input_ids.to(self.model.device)
+
+        pref = compute_action_sequence_preference_shared(
+            forward_logits_fn=self.model,
+            tokenizer=self.tokenizer,
+            input_ids=input_ids,
+            action1_label=action1_label,
+            action2_label=action2_label,
+        )
+
+        return {
+            "logp_action1": pref.logp_action1,
+            "logp_action2": pref.logp_action2,
+            "delta_logp_action2_minus_action1": pref.delta_logp_action2_minus_action1,
+            "p_action1": pref.p_action1,
+            "p_action2": pref.p_action2,
+            "preferred_action": pref.preferred_action,
+        }
 
     def compute_layer_logits(self, prompt: str) -> Tuple[torch.Tensor, Dict]:
         """
@@ -41,8 +86,9 @@ class LogitLensAnalyzer:
             final_logits: Final layer logits (vocab_size,)
             layer_logits: Dict mapping layer_idx -> logits tensor
         """
-        # Tokenize
-        input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(self.model.device)
+        # Tokenize (optionally with chat template, matching inference pipeline)
+        prepared_prompt = self._prepare_prompt(prompt)
+        input_ids = self.tokenizer(prepared_prompt, return_tensors="pt").input_ids.to(self.model.device)
 
         # Run with cache
         final_logits, cache = self.model.run_with_cache(input_ids)
@@ -94,7 +140,7 @@ class LogitLensAnalyzer:
             delta = d_logit - c_logit
 
             delta_logits.append(delta)
-
+            
         return np.array(delta_logits)
 
     def analyze_decision_layer(self, trajectory: np.ndarray, threshold: float = 0.5) -> Dict:
@@ -293,6 +339,9 @@ class LogitLensVisualizer:
     def plot_final_comparison_heatmap(
         final_deltas: Dict[str, Dict[str, float]],
         output_path: Path = None,
+        *,
+        title: str = "Final Layer Preferences (Heatmap)",
+        colorbar_label: str = "Logit(Defect) - Logit(Cooperate)",
     ):
         """
         Create heatmap of final layer preferences across models and scenarios.
@@ -322,13 +371,13 @@ class LogitLensVisualizer:
             center=0,
             annot=True,
             fmt=".2f",
-            cbar_kws={"label": "Logit(Defect) - Logit(Cooperate)"},
+            cbar_kws={"label": colorbar_label},
             xticklabels=[MODEL_LABELS[m] for m in models],
             yticklabels=[s.replace('_', ' ').title() for s in scenarios],
             ax=ax,
         )
 
-        ax.set_title("Final Layer Preferences (Heatmap)", fontsize=16, pad=15)
+        ax.set_title(title, fontsize=16, pad=15)
 
         plt.tight_layout()
 

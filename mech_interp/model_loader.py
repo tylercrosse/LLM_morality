@@ -3,7 +3,7 @@
 import torch
 from pathlib import Path
 from typing import Optional, Dict
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import PeftModel
 
 from mech_interp.utils import get_model_path
@@ -22,11 +22,21 @@ class HookedGemmaModel:
         self.tokenizer = tokenizer
         self.device = device
 
+        # Unwrap PEFT wrappers for stable access to base architecture modules.
+        if hasattr(hf_model, "get_base_model"):
+            base_lm = hf_model.get_base_model()
+        else:
+            base_lm = hf_model
+
+        # Gemma2ForCausalLM -> .model is the transformer stack with .layers/.norm
+        self.base_lm = base_lm
+        self.transformer_stack = base_lm.model
+
         # Model configuration
-        self.n_layers = hf_model.config.num_hidden_layers
-        self.n_heads = hf_model.config.num_attention_heads
-        self.d_model = hf_model.config.hidden_size
-        self.d_vocab = hf_model.config.vocab_size
+        self.n_layers = base_lm.config.num_hidden_layers
+        self.n_heads = base_lm.config.num_attention_heads
+        self.d_model = base_lm.config.hidden_size
+        self.d_vocab = base_lm.config.vocab_size
 
         # Cache for storing activations
         self.cache = {}
@@ -39,7 +49,7 @@ class HookedGemmaModel:
 
         # Hook for each layer's outputs
         for layer_idx in range(self.n_layers):
-            layer = self.model.model.layers[layer_idx]
+            layer = self.transformer_stack.layers[layer_idx]
 
             # Hook for residual stream after attention + MLP
             def make_resid_hook(idx):
@@ -115,8 +125,8 @@ class HookedGemmaModel:
                         self.cache[f"model.layers.{layer_idx}.self_attn.attn_weights"] = attn_weights.detach()
 
         # Get embedding matrix for logit lens (W_U) and final layer norm
-        self.W_U = self.model.lm_head.weight.detach()  # (vocab_size, d_model)
-        self.ln_final = self.model.model.norm  # Final RMSNorm layer
+        self.W_U = self.base_lm.lm_head.weight.detach()  # (vocab_size, d_model)
+        self.ln_final = self.transformer_stack.norm  # Final RMSNorm layer
 
         self.remove_hooks()
 
@@ -162,6 +172,8 @@ class LoRAModelLoader:
         device: str = "cuda",
         dtype: torch.dtype = torch.bfloat16,
         attn_implementation: str = "eager",
+        merge_lora: bool = True,
+        use_4bit: bool = False,
     ):
         """
         Load HuggingFace model with optional LoRA adapter.
@@ -178,29 +190,50 @@ class LoRAModelLoader:
         """
         print(f"Loading base model from {LoRAModelLoader.BASE_MODEL_PATH}...")
 
-        base_model = AutoModelForCausalLM.from_pretrained(
-            LoRAModelLoader.BASE_MODEL_PATH,
-            torch_dtype=dtype,
-            device_map=device,
-            trust_remote_code=True,
-            attn_implementation=attn_implementation,
-        )
+        if use_4bit:
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16,
+            )
+            base_model = AutoModelForCausalLM.from_pretrained(
+                LoRAModelLoader.BASE_MODEL_PATH,
+                quantization_config=bnb_config,
+                device_map={"": 0} if device == "cuda" else device,
+                trust_remote_code=True,
+                attn_implementation=attn_implementation,
+            )
+        else:
+            base_model = AutoModelForCausalLM.from_pretrained(
+                LoRAModelLoader.BASE_MODEL_PATH,
+                torch_dtype=dtype,
+                device_map=device,
+                trust_remote_code=True,
+                attn_implementation=attn_implementation,
+            )
 
         # If not base model, load LoRA adapter and merge
         if model_id != "base":
             adapter_path = get_model_path(model_id)
             print(f"Loading LoRA adapter from {adapter_path}...")
 
+            peft_kwargs = {}
+            if not use_4bit:
+                peft_kwargs["torch_dtype"] = dtype
+
             model = PeftModel.from_pretrained(
                 base_model,
                 adapter_path,
-                torch_dtype=dtype,
+                **peft_kwargs,
             )
 
-            print("Merging LoRA weights into base model (in-memory)...")
-            # In-memory merge - no disk write
-            model = model.merge_and_unload()
-            print("LoRA merge complete!")
+            if merge_lora:
+                print("Merging LoRA weights into base model (in-memory)...")
+                # In-memory merge - no disk write
+                model = model.merge_and_unload()
+                print("LoRA merge complete!")
+            else:
+                print("Using non-merged LoRA adapter (inference-style).")
         else:
             print("Using base model without LoRA adaptation.")
             model = base_model
@@ -213,6 +246,8 @@ class LoRAModelLoader:
         device: str = "cuda",
         dtype: torch.dtype = torch.bfloat16,
         attn_implementation: str = "eager",
+        merge_lora: bool = True,
+        use_4bit: bool = False,
     ) -> HookedGemmaModel:
         """
         Load model with activation caching support.
@@ -229,7 +264,12 @@ class LoRAModelLoader:
         """
         # Load HuggingFace model (with LoRA merged if applicable)
         hf_model = LoRAModelLoader.load_base_hf_model(
-            model_id, device, dtype, attn_implementation=attn_implementation
+            model_id,
+            device,
+            dtype,
+            attn_implementation=attn_implementation,
+            merge_lora=merge_lora,
+            use_4bit=use_4bit,
         )
         tokenizer = LoRAModelLoader.load_tokenizer()
 

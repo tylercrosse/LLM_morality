@@ -18,6 +18,10 @@ import seaborn as sns
 from dataclasses import dataclass
 import torch
 
+from mech_interp.decision_metrics import (
+    compute_action_sequence_preference,
+    prepare_prompt,
+)
 from mech_interp.model_loader import LoRAModelLoader
 from mech_interp.utils import load_prompt_dataset
 
@@ -28,6 +32,11 @@ class AttentionPatternResult:
     model_id: str
     scenario: str
     variant: int
+
+    # Sequence-level decision metric on this prompt.
+    seq_delta_logp_action2_minus_action1: float
+    seq_p_action2: float
+    seq_preferred_action: str
 
     # Attention weights: (num_layers, num_heads, seq_len, seq_len)
     attention_patterns: np.ndarray
@@ -51,6 +60,9 @@ class AttentionPatternResult:
             'model_id': self.model_id,
             'scenario': self.scenario,
             'variant': self.variant,
+            'seq_delta_logp_action2_minus_action1': self.seq_delta_logp_action2_minus_action1,
+            'seq_p_action2': self.seq_p_action2,
+            'seq_preferred_action': self.seq_preferred_action,
             'attention_patterns': self.attention_patterns.tolist(),
             'final_token_attention': self.final_token_attention.tolist(),
             'token_ids': self.token_ids,
@@ -64,7 +76,14 @@ class AttentionPatternResult:
 class AttentionAnalyzer:
     """Analyzes attention patterns in models."""
 
-    def __init__(self, model_id: str, device: str = "cuda"):
+    def __init__(
+        self,
+        model_id: str,
+        device: str = "cuda",
+        use_chat_template: bool = True,
+        action1_label: str = "action1",
+        action2_label: str = "action2",
+    ):
         """Initialize analyzer with a model.
 
         Args:
@@ -73,8 +92,16 @@ class AttentionAnalyzer:
         """
         self.model_id = model_id
         self.device = device
-        self.model = LoRAModelLoader.load_hooked_model(model_id)
-        self.tokenizer = LoRAModelLoader.load_tokenizer()
+        self.model = LoRAModelLoader.load_hooked_model(
+            model_id,
+            device=device,
+            merge_lora=False,
+            use_4bit=True,
+        )
+        self.tokenizer = self.model.tokenizer
+        self.use_chat_template = use_chat_template
+        self.action1_label = action1_label
+        self.action2_label = action2_label
 
     def analyze_prompt(self, prompt: str, scenario: str, variant: int) -> AttentionPatternResult:
         """Analyze attention patterns for a single prompt.
@@ -87,9 +114,24 @@ class AttentionAnalyzer:
         Returns:
             AttentionPatternResult with attention patterns and token information
         """
+        prepared_prompt = prepare_prompt(
+            self.tokenizer,
+            prompt,
+            use_chat_template=self.use_chat_template,
+        )
+
         # Tokenize
-        inputs = self.tokenizer(prompt, return_tensors="pt", add_special_tokens=True)
+        inputs = self.tokenizer(prepared_prompt, return_tensors="pt", add_special_tokens=True)
         input_ids = inputs["input_ids"].to(self.device)
+
+        # Sequence-level decision metric aligned with logit-lens/patching/DLA.
+        seq_pref = compute_action_sequence_preference(
+            forward_logits_fn=self.model,
+            tokenizer=self.tokenizer,
+            input_ids=input_ids,
+            action1_label=self.action1_label,
+            action2_label=self.action2_label,
+        )
 
         # Run forward pass with cache to get attention weights
         with torch.no_grad():
@@ -97,8 +139,8 @@ class AttentionAnalyzer:
 
         # Extract attention patterns
         # Cache keys: "model.layers.{layer}.self_attn.attn_weights"
-        num_layers = 26
-        num_heads = 8
+        num_layers = self.model.n_layers
+        num_heads = self.model.n_heads
         seq_len = input_ids.shape[1]
 
         attention_patterns = np.zeros((num_layers, num_heads, seq_len, seq_len))
@@ -128,6 +170,9 @@ class AttentionAnalyzer:
             model_id=self.model_id,
             scenario=scenario,
             variant=variant,
+            seq_delta_logp_action2_minus_action1=float(seq_pref.delta_logp_action2_minus_action1),
+            seq_p_action2=float(seq_pref.p_action2),
+            seq_preferred_action=seq_pref.preferred_action,
             attention_patterns=attention_patterns,
             final_token_attention=final_token_attention,
             token_ids=token_ids,
@@ -231,6 +276,17 @@ class AttentionComparator:
             comparisons.append({
                 'scenario': r1.scenario,
                 'variant': r1.variant,
+                f'{model1_name}_seq_delta': r1.seq_delta_logp_action2_minus_action1,
+                f'{model2_name}_seq_delta': r2.seq_delta_logp_action2_minus_action1,
+                f'{model1_name}_seq_p_action2': r1.seq_p_action2,
+                f'{model2_name}_seq_p_action2': r2.seq_p_action2,
+                f'{model1_name}_seq_pref': r1.seq_preferred_action,
+                f'{model2_name}_seq_pref': r2.seq_preferred_action,
+                'seq_delta_diff': (
+                    r1.seq_delta_logp_action2_minus_action1
+                    - r2.seq_delta_logp_action2_minus_action1
+                ),
+                'seq_p_action2_diff': r1.seq_p_action2 - r2.seq_p_action2,
                 f'{model1_name}_action_attn': m1_action_attn,
                 f'{model2_name}_action_attn': m2_action_attn,
                 f'{model1_name}_opponent_attn': m1_opponent_attn,
@@ -404,6 +460,28 @@ def run_attention_analysis(
             json.dump([r.to_dict() for r in model_results], f, indent=2)
         print(f"\nSaved results to {results_file}")
 
+        # Lightweight tabular export for quick validation.
+        summary_rows = []
+        for r in model_results:
+            summary_rows.append({
+                "model_id": r.model_id,
+                "scenario": r.scenario,
+                "variant": r.variant,
+                "seq_preferred_action": r.seq_preferred_action,
+                "seq_p_action2": r.seq_p_action2,
+                "seq_delta_logp_action2_minus_action1": r.seq_delta_logp_action2_minus_action1,
+                "attn_to_action_tokens": float(r.final_token_attention[r.action_keyword_positions].sum())
+                if r.action_keyword_positions else 0.0,
+                "attn_to_opponent_context": float(r.final_token_attention[r.opponent_action_positions].sum())
+                if r.opponent_action_positions else 0.0,
+                "attn_to_payoff_tokens": float(r.final_token_attention[r.payoff_positions].sum())
+                if r.payoff_positions else 0.0,
+            })
+        summary_df = pd.DataFrame(summary_rows).sort_values(["scenario", "variant"])
+        summary_file = output_dir / f"attention_summary_{model_id}.csv"
+        summary_df.to_csv(summary_file, index=False)
+        print(f"Saved summary to {summary_file}")
+
     return all_results
 
 
@@ -434,6 +512,9 @@ def compare_deontological_vs_utilitarian(
         model_id=d['model_id'],
         scenario=d['scenario'],
         variant=d['variant'],
+        seq_delta_logp_action2_minus_action1=d.get('seq_delta_logp_action2_minus_action1', 0.0),
+        seq_p_action2=d.get('seq_p_action2', np.nan),
+        seq_preferred_action=d.get('seq_preferred_action', 'unknown'),
         attention_patterns=np.array(d['attention_patterns']),
         final_token_attention=np.array(d['final_token_attention']),
         token_ids=d['token_ids'],
@@ -447,6 +528,9 @@ def compare_deontological_vs_utilitarian(
         model_id=d['model_id'],
         scenario=d['scenario'],
         variant=d['variant'],
+        seq_delta_logp_action2_minus_action1=d.get('seq_delta_logp_action2_minus_action1', 0.0),
+        seq_p_action2=d.get('seq_p_action2', np.nan),
+        seq_preferred_action=d.get('seq_preferred_action', 'unknown'),
         attention_patterns=np.array(d['attention_patterns']),
         final_token_attention=np.array(d['final_token_attention']),
         token_ids=d['token_ids'],
@@ -484,5 +568,9 @@ def compare_deontological_vs_utilitarian(
     print("\nBy scenario:")
     scenario_means = comparison_df.groupby('scenario')[['action_attn_diff', 'opponent_attn_diff', 'payoff_attn_diff']].mean()
     print(scenario_means)
+    print("\nSequence metric diffs (Deontological - Utilitarian):")
+    print(
+        comparison_df.groupby('scenario')[['seq_delta_diff', 'seq_p_action2_diff']].mean()
+    )
 
     return comparison_df

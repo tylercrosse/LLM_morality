@@ -66,6 +66,8 @@ def main():
     print("\nKey outputs:")
     print(f"  - attention_results_PT3_COREDe.json")
     print(f"  - attention_results_PT3_COREUt.json")
+    print(f"  - attention_summary_PT3_COREDe.csv")
+    print(f"  - attention_summary_PT3_COREUt.csv")
     print(f"  - attention_comparison_De_vs_Ut.csv")
     print(f"  - attention_comparison_Deontological_vs_Utilitarian.png")
 

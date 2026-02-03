@@ -22,6 +22,10 @@ from scipy.stats import pearsonr, spearmanr
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
 
+from mech_interp.decision_metrics import (
+    compute_action_sequence_preference,
+    prepare_prompt,
+)
 from mech_interp.model_loader import LoRAModelLoader
 from mech_interp.utils import load_prompt_dataset, get_action_token_ids
 
@@ -32,6 +36,11 @@ class ComponentInteractionResult:
     model_id: str
     scenario: str
     variant: int
+
+    # Sequence-level decision metric for this prompt.
+    seq_delta_logp_action2_minus_action1: float
+    seq_p_action2: float
+    seq_preferred_action: str
 
     # Component activations: dict mapping component name -> activation value
     # e.g., "L8_MLP" -> scalar, "L25H3" -> scalar
@@ -47,6 +56,9 @@ class ComponentInteractionResult:
             'model_id': self.model_id,
             'scenario': self.scenario,
             'variant': self.variant,
+            'seq_delta_logp_action2_minus_action1': self.seq_delta_logp_action2_minus_action1,
+            'seq_p_action2': self.seq_p_action2,
+            'seq_preferred_action': self.seq_preferred_action,
             'component_activations': self.component_activations,
         }
         if self.correlation_matrix is not None:
@@ -58,7 +70,14 @@ class ComponentInteractionResult:
 class ComponentInteractionAnalyzer:
     """Analyzes interactions between model components."""
 
-    def __init__(self, model_id: str, device: str = "cuda"):
+    def __init__(
+        self,
+        model_id: str,
+        device: str = "cuda",
+        use_chat_template: bool = True,
+        action1_label: str = "action1",
+        action2_label: str = "action2",
+    ):
         """Initialize analyzer with a model.
 
         Args:
@@ -67,8 +86,16 @@ class ComponentInteractionAnalyzer:
         """
         self.model_id = model_id
         self.device = device
-        self.model = LoRAModelLoader.load_hooked_model(model_id)
-        self.tokenizer = LoRAModelLoader.load_tokenizer()
+        self.model = LoRAModelLoader.load_hooked_model(
+            model_id,
+            device=device,
+            merge_lora=False,
+            use_4bit=True,
+        )
+        self.tokenizer = self.model.tokenizer
+        self.use_chat_template = use_chat_template
+        self.action1_label = action1_label
+        self.action2_label = action2_label
 
         # Get action token IDs
         action_tokens = get_action_token_ids(self.tokenizer)
@@ -91,9 +118,23 @@ class ComponentInteractionAnalyzer:
         Returns:
             ComponentInteractionResult with component activations
         """
+        prepared_prompt = prepare_prompt(
+            self.tokenizer,
+            prompt,
+            use_chat_template=self.use_chat_template,
+        )
         # Tokenize
-        inputs = self.tokenizer(prompt, return_tensors="pt", add_special_tokens=True)
+        inputs = self.tokenizer(prepared_prompt, return_tensors="pt", add_special_tokens=True)
         input_ids = inputs["input_ids"].to(self.device)
+
+        # Sequence-level decision metric.
+        seq_pref = compute_action_sequence_preference(
+            forward_logits_fn=self.model,
+            tokenizer=self.tokenizer,
+            input_ids=input_ids,
+            action1_label=self.action1_label,
+            action2_label=self.action2_label,
+        )
 
         # Run forward pass with cache
         with torch.no_grad():
@@ -106,7 +147,7 @@ class ComponentInteractionAnalyzer:
         # Extract attention and MLP activations for each layer
         # Note: HookedGemmaModel provides full attention output, not per-head
         # We use layer-level granularity for correlation analysis
-        for layer in range(26):
+        for layer in range(self.model.n_layers):
             # Attention output
             attn_key = f"blocks.{layer}.hook_attn_out"
             if attn_key in cache:
@@ -127,6 +168,9 @@ class ComponentInteractionAnalyzer:
             model_id=self.model_id,
             scenario=scenario,
             variant=variant,
+            seq_delta_logp_action2_minus_action1=float(seq_pref.delta_logp_action2_minus_action1),
+            seq_p_action2=float(seq_pref.p_action2),
+            seq_preferred_action=seq_pref.preferred_action,
             component_activations=component_activations,
         )
 
@@ -157,6 +201,10 @@ class ComponentInteractionAnalyzer:
 
         # Compute correlation between components (correlation of columns)
         corr_matrix = np.zeros((num_components, num_components))
+        if num_scenarios < 2:
+            # Degenerate case for smoke tests / tiny datasets.
+            np.fill_diagonal(corr_matrix, 1.0)
+            return corr_matrix, component_names
 
         for i in range(num_components):
             for j in range(num_components):
@@ -448,6 +496,22 @@ def run_component_interaction_analysis(
 
         print(f"  Saved results to {results_file}")
         print(f"  Saved correlation matrix to {corr_file}")
+
+        summary_rows = []
+        for r in model_results:
+            summary_rows.append({
+                "model_id": r.model_id,
+                "scenario": r.scenario,
+                "variant": r.variant,
+                "seq_preferred_action": r.seq_preferred_action,
+                "seq_p_action2": r.seq_p_action2,
+                "seq_delta_logp_action2_minus_action1": r.seq_delta_logp_action2_minus_action1,
+                "mean_component_activation": float(np.mean(list(r.component_activations.values()))),
+            })
+        summary_df = pd.DataFrame(summary_rows).sort_values(["scenario", "variant"])
+        summary_file = output_dir / f"component_interaction_summary_{model_id}.csv"
+        summary_df.to_csv(summary_file, index=False)
+        print(f"  Saved summary to {summary_file}")
 
         # Plot correlation matrix
         comparator = InteractionComparator(output_dir)

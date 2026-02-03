@@ -11,6 +11,11 @@ from typing import Dict, List, Tuple
 from dataclasses import dataclass
 import pandas as pd
 
+from mech_interp.decision_metrics import (
+    prepare_prompt,
+    compute_action_sequence_preference,
+)
+
 
 @dataclass
 class DLAResult:
@@ -25,8 +30,13 @@ class DLAResult:
     # Residual/other contributions
     residual_contribution: float
 
-    # Final logit difference (Defect - Cooperate)
+    # Primary decision metric: sequence log-prob preference (action2 - action1)
     final_delta: float
+    final_preferred_action: str
+    final_p_action2: float
+
+    # Legacy single-token metric at final position (D token - C token)
+    final_delta_legacy: float
 
     # Metadata
     model_name: str
@@ -42,7 +52,14 @@ class DirectLogitAttributor:
     to measure its contribution to the final Cooperate vs Defect decision.
     """
 
-    def __init__(self, hooked_model, action_tokens: Dict):
+    def __init__(
+        self,
+        hooked_model,
+        action_tokens: Dict,
+        use_chat_template: bool = True,
+        action1_label: str = "action1",
+        action2_label: str = "action2",
+    ):
         """
         Args:
             hooked_model: HookedGemmaModel instance
@@ -51,6 +68,9 @@ class DirectLogitAttributor:
         self.model = hooked_model
         self.action_tokens = action_tokens
         self.device = hooked_model.device if hooked_model is not None else "cpu"
+        self.use_chat_template = use_chat_template
+        self.action1_label = action1_label
+        self.action2_label = action2_label
 
     def decompose_logits(self, prompt: str) -> DLAResult:
         """
@@ -59,24 +79,36 @@ class DirectLogitAttributor:
         Returns:
             DLAResult with per-head and per-MLP attributions
         """
-        # Run forward pass with caching
-        input_ids = self.model.tokenizer(
+        # Prepare prompt in inference-style format, then run with caching.
+        prepared_prompt = prepare_prompt(
+            self.model.tokenizer,
             prompt,
+            use_chat_template=self.use_chat_template,
+        )
+        input_ids = self.model.tokenizer(
+            prepared_prompt,
             return_tensors="pt"
         ).input_ids.to(self.device)
 
         final_logits, cache = self.model.run_with_cache(input_ids)
 
-        # Get final position logits
+        # Legacy single-token metric (for backward compatibility with past DLA runs).
         final_pos_logits = final_logits[0, -1, :]
-
-        # Extract action token logits
         c_token = self.action_tokens['C']
         d_token = self.action_tokens['D']
+        final_delta_legacy = float(final_pos_logits[d_token].item() - final_pos_logits[c_token].item())
 
-        c_logit = final_pos_logits[c_token].item()
-        d_logit = final_pos_logits[d_token].item()
-        final_delta = d_logit - c_logit
+        # Primary sequence metric, aligned with logit-lens + patching.
+        pref = compute_action_sequence_preference(
+            forward_logits_fn=self.model,
+            tokenizer=self.model.tokenizer,
+            input_ids=input_ids,
+            action1_label=self.action1_label,
+            action2_label=self.action2_label,
+        )
+        final_delta = float(pref.delta_logp_action2_minus_action1)
+        final_p_action2 = float(pref.p_action2)
+        final_preferred_action = pref.preferred_action
 
         # Decompose into per-component contributions
         head_contribs, mlp_contribs, residual = self._attribute_components(
@@ -88,6 +120,9 @@ class DirectLogitAttributor:
             mlp_contributions=mlp_contribs,
             residual_contribution=residual,
             final_delta=final_delta,
+            final_preferred_action=final_preferred_action,
+            final_p_action2=final_p_action2,
+            final_delta_legacy=final_delta_legacy,
             model_name=getattr(self.model, 'name', 'unknown'),
             prompt_text=prompt,
             scenario='unknown'
@@ -107,8 +142,8 @@ class DirectLogitAttributor:
         - We need to decompose attention output into per-head contributions
 
         Returns:
-            head_contributions: [n_layers, n_heads] - delta logit per head
-            mlp_contributions: [n_layers] - delta logit per MLP
+            head_contributions: [n_layers, n_heads] - legacy token-direction delta logit per head
+            mlp_contributions: [n_layers] - legacy token-direction delta logit per MLP
             residual: Unexplained contribution (should be small)
         """
         n_layers = self.model.n_layers
@@ -121,7 +156,7 @@ class DirectLogitAttributor:
         W_U = self.model.W_U  # [vocab_size, d_model]
         ln_final = self.model.ln_final
 
-        # Extract action direction in unembed space
+        # Legacy action direction in unembed space: D token - C token.
         c_direction = W_U[c_token, :]  # [d_model]
         d_direction = W_U[d_token, :]  # [d_model]
         action_direction = d_direction - c_direction  # Defect - Cooperate
@@ -262,7 +297,7 @@ class DLAVisualizer:
 
         # Add colorbar
         cbar = plt.colorbar(im, ax=ax)
-        cbar.set_label('Logit Contribution (D - C)', rotation=270, labelpad=20)
+        cbar.set_label('Legacy Logit Contribution (D token - C token)', rotation=270, labelpad=20)
 
         # Labels
         ax.set_xlabel('Head Index')
@@ -297,7 +332,7 @@ class DLAVisualizer:
 
         ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
         ax.set_xlabel('Layer Index')
-        ax.set_ylabel('MLP Contribution (D - C)')
+        ax.set_ylabel('MLP Contribution (Legacy D token - C token)')
         ax.set_title(title or f"MLP Contributions: {result.model_name}")
         ax.grid(True, alpha=0.3)
 
@@ -374,7 +409,7 @@ class DLAVisualizer:
             self.plot_head_heatmap(
                 result,
                 ax=axes[idx],
-                title=f"{label}\nΔ={result.final_delta:.2f}"
+                title=f"{label}\nΔseq={result.final_delta:.2f}"
             )
 
         fig.suptitle(f"Head Contributions: {scenario}", fontsize=14, y=0.98)

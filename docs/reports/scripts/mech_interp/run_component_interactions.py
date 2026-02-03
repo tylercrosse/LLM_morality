@@ -82,6 +82,8 @@ def main():
     print("\nKey outputs:")
     print(f"  - component_activations_PT3_COREDe.json")
     print(f"  - component_activations_PT3_COREUt.json")
+    print(f"  - component_interaction_summary_PT3_COREDe.csv")
+    print(f"  - component_interaction_summary_PT3_COREUt.csv")
     print(f"  - correlation_matrix_PT3_COREDe.npz")
     print(f"  - correlation_matrix_PT3_COREUt.npz")
     print(f"  - correlation_matrix_PT3_COREDe.png")

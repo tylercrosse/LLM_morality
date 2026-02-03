@@ -13,6 +13,11 @@ from dataclasses import dataclass
 import pandas as pd
 from tqdm import tqdm
 
+from mech_interp.decision_metrics import (
+    prepare_prompt,
+    compute_action_sequence_preference,
+)
+
 
 @dataclass
 class PatchResult:
@@ -24,20 +29,30 @@ class PatchResult:
     patched_component: str  # e.g., "L5H3" or "L12_MLP"
     scenario: str
 
-    # Baseline behavior (no patching)
-    baseline_delta: float  # Target model's Defect - Cooperate logit
-    baseline_action: str  # "Cooperate" or "Defect"
+    # Baseline behavior (primary: sequence preference)
+    baseline_delta: float  # ΔlogP(action2-action1)
+    baseline_action: str  # "Cooperate" or "Defect" from sequence preference
+    baseline_p_action2: float
+
+    # Legacy baseline (single-token digit delta)
+    baseline_delta_legacy: float
 
     # Patched behavior
     patched_delta: float
     patched_action: str
+    patched_p_action2: float
+
+    # Legacy patched behavior (single-token digit delta)
+    patched_delta_legacy: float
 
     # Behavioral change
     delta_change: float  # patched_delta - baseline_delta
+    delta_change_legacy: float  # patched_delta_legacy - baseline_delta_legacy
     action_flipped: bool  # Did the action choice change?
 
     # Effect size
     effect_size: float  # Normalized change
+    effect_size_legacy: float
 
 
 @dataclass
@@ -67,7 +82,10 @@ class ActivationPatcher:
         source_model,
         target_model,
         action_tokens: Dict,
-        device: str = "cuda"
+        device: str = "cuda",
+        use_chat_template: bool = True,
+        action1_label: str = "action1",
+        action2_label: str = "action2",
     ):
         """
         Args:
@@ -80,43 +98,71 @@ class ActivationPatcher:
         self.target_model = target_model
         self.action_tokens = action_tokens
         self.device = device
+        self.use_chat_template = use_chat_template
+        self.action1_label = action1_label
+        self.action2_label = action2_label
 
         # Cache for source activations
         self.source_cache = None
+
+    def _prepare_input_ids(self, model, prompt: str) -> torch.Tensor:
+        prepared = prepare_prompt(
+            model.tokenizer,
+            prompt,
+            use_chat_template=self.use_chat_template,
+        )
+        return model.tokenizer(prepared, return_tensors="pt").input_ids.to(self.device)
+
+    def _compute_legacy_token_delta(self, model, input_ids: torch.Tensor) -> float:
+        """Legacy single-token decision metric: logit(action2_digit)-logit(action1_digit)."""
+        with torch.no_grad():
+            logits = model(input_ids)
+        final_logits = logits[0, -1, :]
+        c_token = self.action_tokens['C']
+        d_token = self.action_tokens['D']
+        return float(final_logits[d_token].item() - final_logits[c_token].item())
+
+    def _compute_sequence_behavior(self, model, input_ids: torch.Tensor) -> Tuple[float, str, float]:
+        pref = compute_action_sequence_preference(
+            forward_logits_fn=model,
+            tokenizer=self.target_model.tokenizer,
+            input_ids=input_ids,
+            action1_label=self.action1_label,
+            action2_label=self.action2_label,
+        )
+        action = "Defect" if pref.preferred_action == self.action2_label else "Cooperate"
+        return (
+            float(pref.delta_logp_action2_minus_action1),
+            action,
+            float(pref.p_action2),
+        )
 
     def get_baseline_behavior(self, prompt: str) -> Tuple[float, str]:
         """
         Get target model's baseline behavior (no patching).
 
         Returns:
-            (delta_logit, action_choice)
+            (delta_sequence_preference, action_choice)
         """
-        input_ids = self.target_model.tokenizer(
-            prompt,
-            return_tensors="pt"
-        ).input_ids.to(self.device)
-
-        with torch.no_grad():
-            logits, _ = self.target_model.run_with_cache(input_ids)
-            final_logits = logits[0, -1, :]
-
-        c_token = self.action_tokens['C']
-        d_token = self.action_tokens['D']
-
-        c_logit = final_logits[c_token].item()
-        d_logit = final_logits[d_token].item()
-        delta = d_logit - c_logit
-
-        action = "Defect" if delta > 0 else "Cooperate"
-
+        input_ids = self._prepare_input_ids(self.target_model, prompt)
+        delta, action, _ = self._compute_sequence_behavior(self.target_model, input_ids)
         return delta, action
+
+    def get_baseline_behavior_full(self, prompt: str) -> Dict[str, float]:
+        """Get baseline sequence and legacy token-level metrics."""
+        input_ids = self._prepare_input_ids(self.target_model, prompt)
+        delta, action, p_action2 = self._compute_sequence_behavior(self.target_model, input_ids)
+        legacy_delta = self._compute_legacy_token_delta(self.target_model, input_ids)
+        return {
+            "baseline_delta": delta,
+            "baseline_action": action,
+            "baseline_p_action2": p_action2,
+            "baseline_delta_legacy": legacy_delta,
+        }
 
     def cache_source_activations(self, prompt: str):
         """Run source model and cache all activations."""
-        input_ids = self.source_model.tokenizer(
-            prompt,
-            return_tensors="pt"
-        ).input_ids.to(self.device)
+        input_ids = self._prepare_input_ids(self.source_model, prompt)
 
         with torch.no_grad():
             _, cache = self.source_model.run_with_cache(input_ids)
@@ -127,7 +173,7 @@ class ActivationPatcher:
         self,
         prompt: str,
         component: str
-    ) -> Tuple[float, str]:
+    ) -> Tuple[float, str, float, float]:
         """
         Patch a single component and measure output.
 
@@ -136,7 +182,7 @@ class ActivationPatcher:
             component: Component to patch (e.g., "L5H3" or "L12_MLP")
 
         Returns:
-            (patched_delta, patched_action)
+            (patched_delta_seq, patched_action, patched_p_action2, patched_delta_legacy)
         """
         # Parse component specification
         if "_MLP" in component:
@@ -153,26 +199,25 @@ class ActivationPatcher:
         # Get source activation to patch in
         if component_type == "mlp":
             cache_key = f"blocks.{layer_idx}.hook_mlp_out"
-            source_activation = self.source_cache[cache_key]
+            source_activation_last = self.source_cache[cache_key][:, -1:, :]
         else:
             cache_key = f"blocks.{layer_idx}.hook_attn_out"
-            source_activation = self.source_cache[cache_key]
+            source_activation_last = self.source_cache[cache_key][:, -1:, :]
 
         # Run target model with patching hook
-        input_ids = self.target_model.tokenizer(
-            prompt,
-            return_tensors="pt"
-        ).input_ids.to(self.device)
+        input_ids = self._prepare_input_ids(self.target_model, prompt)
 
         # Register patching hook
         hook_handles = []
 
         if component_type == "mlp":
-            layer = self.target_model.model.model.layers[layer_idx]
+            layer = self.target_model.transformer_stack.layers[layer_idx]
 
             def patch_hook(module, input, output):
-                # MLP returns a tensor, so we replace it directly.
-                return source_activation
+                # Patch only the final position to keep sequence-length compatibility.
+                patched = output.clone()
+                patched[:, -1:, :] = source_activation_last.to(output.device, dtype=output.dtype)
+                return patched
 
             # Hook the MLP module
             handle = layer.mlp.register_forward_hook(patch_hook)
@@ -181,35 +226,30 @@ class ActivationPatcher:
         else:
             # For attention heads, we need to patch at the attention output level
             # This is a simplification - ideally we'd patch individual head outputs
-            layer = self.target_model.model.model.layers[layer_idx]
+            layer = self.target_model.transformer_stack.layers[layer_idx]
 
             def patch_hook(module, input, output):
-                # Replace attention output with source
-                return (source_activation,) + output[1:]
+                # Replace attention output at final position only.
+                attn_out = output[0]
+                patched = attn_out.clone()
+                patched[:, -1:, :] = source_activation_last.to(attn_out.device, dtype=attn_out.dtype)
+                return (patched,) + output[1:]
 
             handle = layer.self_attn.register_forward_hook(patch_hook)
             hook_handles.append(handle)
 
-        # Run forward pass with patching
-        with torch.no_grad():
-            logits = self.target_model.model(input_ids).logits
-            final_logits = logits[0, -1, :]
+        # Run forward passes with patching active (sequence + legacy metrics)
+        patched_delta, patched_action, patched_p_action2 = self._compute_sequence_behavior(
+            self.target_model,
+            input_ids,
+        )
+        patched_delta_legacy = self._compute_legacy_token_delta(self.target_model, input_ids)
 
         # Remove hooks
         for handle in hook_handles:
             handle.remove()
 
-        # Compute patched behavior
-        c_token = self.action_tokens['C']
-        d_token = self.action_tokens['D']
-
-        c_logit = final_logits[c_token].item()
-        d_logit = final_logits[d_token].item()
-        delta = d_logit - c_logit
-
-        action = "Defect" if delta > 0 else "Cooperate"
-
-        return delta, action
+        return patched_delta, patched_action, patched_p_action2, patched_delta_legacy
 
     def systematic_patch(
         self,
@@ -229,7 +269,11 @@ class ActivationPatcher:
             List of PatchResult objects
         """
         # Get baseline
-        baseline_delta, baseline_action = self.get_baseline_behavior(prompt)
+        baseline = self.get_baseline_behavior_full(prompt)
+        baseline_delta = baseline["baseline_delta"]
+        baseline_action = baseline["baseline_action"]
+        baseline_p_action2 = baseline["baseline_p_action2"]
+        baseline_delta_legacy = baseline["baseline_delta_legacy"]
 
         # Cache source activations
         self.cache_source_activations(prompt)
@@ -250,13 +294,15 @@ class ActivationPatcher:
 
         for component in tqdm(components, desc="Patching components", leave=False):
             try:
-                patched_delta, patched_action = self.patch_component(prompt, component)
+                patched_delta, patched_action, patched_p_action2, patched_delta_legacy = self.patch_component(prompt, component)
 
                 delta_change = patched_delta - baseline_delta
+                delta_change_legacy = patched_delta_legacy - baseline_delta_legacy
                 action_flipped = (patched_action != baseline_action)
 
                 # Compute effect size (normalized by baseline)
                 effect_size = abs(delta_change) / (abs(baseline_delta) + 1e-6)
+                effect_size_legacy = abs(delta_change_legacy) / (abs(baseline_delta_legacy) + 1e-6)
 
                 result = PatchResult(
                     source_model=getattr(self.source_model, 'name', 'unknown'),
@@ -265,11 +311,17 @@ class ActivationPatcher:
                     scenario=scenario,
                     baseline_delta=baseline_delta,
                     baseline_action=baseline_action,
+                    baseline_p_action2=baseline_p_action2,
+                    baseline_delta_legacy=baseline_delta_legacy,
                     patched_delta=patched_delta,
                     patched_action=patched_action,
+                    patched_p_action2=patched_p_action2,
+                    patched_delta_legacy=patched_delta_legacy,
                     delta_change=delta_change,
+                    delta_change_legacy=delta_change_legacy,
                     action_flipped=action_flipped,
-                    effect_size=effect_size
+                    effect_size=effect_size,
+                    effect_size_legacy=effect_size_legacy,
                 )
 
                 results.append(result)
@@ -356,12 +408,9 @@ class ActivationPatcher:
             components: List of components to patch
 
         Returns:
-            Patched delta logit
+            Patched sequence preference delta
         """
-        input_ids = self.target_model.tokenizer(
-            prompt,
-            return_tensors="pt"
-        ).input_ids.to(self.device)
+        input_ids = self._prepare_input_ids(self.target_model, prompt)
 
         hook_handles = []
 
@@ -370,49 +419,47 @@ class ActivationPatcher:
             if "_MLP" in component:
                 layer_idx = int(component.split("_")[0][1:])
                 cache_key = f"blocks.{layer_idx}.hook_mlp_out"
-                source_activation = self.source_cache[cache_key]
+                source_activation_last = self.source_cache[cache_key][:, -1:, :]
 
-                layer = self.target_model.model.model.layers[layer_idx]
+                layer = self.target_model.transformer_stack.layers[layer_idx]
 
                 def make_patch_hook(src_act):
                     def hook(module, input, output):
-                        return src_act
+                        patched = output.clone()
+                        patched[:, -1:, :] = src_act.to(output.device, dtype=output.dtype)
+                        return patched
                     return hook
 
-                handle = layer.mlp.register_forward_hook(make_patch_hook(source_activation))
+                handle = layer.mlp.register_forward_hook(make_patch_hook(source_activation_last))
                 hook_handles.append(handle)
 
             else:
                 parts = component[1:].split("H")
                 layer_idx = int(parts[0])
                 cache_key = f"blocks.{layer_idx}.hook_attn_out"
-                source_activation = self.source_cache[cache_key]
+                source_activation_last = self.source_cache[cache_key][:, -1:, :]
 
-                layer = self.target_model.model.model.layers[layer_idx]
+                layer = self.target_model.transformer_stack.layers[layer_idx]
 
                 def make_patch_hook(src_act):
                     def hook(module, input, output):
-                        return (src_act,) + output[1:]
+                        attn_out = output[0]
+                        patched = attn_out.clone()
+                        patched[:, -1:, :] = src_act.to(attn_out.device, dtype=attn_out.dtype)
+                        return (patched,) + output[1:]
                     return hook
 
-                handle = layer.self_attn.register_forward_hook(make_patch_hook(source_activation))
+                handle = layer.self_attn.register_forward_hook(make_patch_hook(source_activation_last))
                 hook_handles.append(handle)
 
-        # Run forward pass
-        with torch.no_grad():
-            logits = self.target_model.model(input_ids).logits
-            final_logits = logits[0, -1, :]
+        # Run forward pass via sequence preference metric
+        patched_delta, _, _ = self._compute_sequence_behavior(self.target_model, input_ids)
 
         # Remove hooks
         for handle in hook_handles:
             handle.remove()
 
-        # Get delta
-        c_token = self.action_tokens['C']
-        d_token = self.action_tokens['D']
-        delta = final_logits[d_token].item() - final_logits[c_token].item()
-
-        return delta
+        return patched_delta
 
 
 class PatchingVisualizer:
@@ -476,7 +523,7 @@ class PatchingVisualizer:
         cbar = plt.colorbar(im, ax=ax)
 
         if metric == "delta_change":
-            cbar.set_label('Δ Logit Change (patched - baseline)', rotation=270, labelpad=20)
+            cbar.set_label('Δ Sequence Preference (patched - baseline)', rotation=270, labelpad=20)
         else:
             cbar.set_label('Effect Size', rotation=270, labelpad=20)
 
@@ -518,7 +565,7 @@ class PatchingVisualizer:
         ax.barh(y_pos, effects, color=colors, alpha=0.7)
         ax.set_yticks(y_pos)
         ax.set_yticklabels(components)
-        ax.set_xlabel('Δ Logit Change')
+        ax.set_xlabel('Δ Sequence Preference')
         ax.set_title(title or f"Top-{top_k} Components by Patching Effect")
         ax.axvline(x=0, color='black', linestyle='-', linewidth=0.5)
         ax.grid(True, alpha=0.3, axis='x')
@@ -556,7 +603,7 @@ class PatchingVisualizer:
         ax.barh(y_pos, effects, color=colors, alpha=0.7)
         ax.set_yticks(y_pos)
         ax.set_yticklabels(components, fontsize=8)
-        ax.set_xlabel('Δ Logit Change')
+        ax.set_xlabel('Δ Sequence Preference')
         ax.set_title(title or f"Circuit Discovery (Minimal: {len(discovery.minimal_circuit)} components)")
         ax.axvline(x=0, color='black', linestyle='-', linewidth=0.5)
         ax.grid(True, alpha=0.3, axis='x')
@@ -586,11 +633,17 @@ def export_patching_results(
             'scenario': r.scenario,
             'baseline_delta': r.baseline_delta,
             'baseline_action': r.baseline_action,
+            'baseline_p_action2': r.baseline_p_action2,
+            'baseline_delta_legacy': r.baseline_delta_legacy,
             'patched_delta': r.patched_delta,
             'patched_action': r.patched_action,
+            'patched_p_action2': r.patched_p_action2,
+            'patched_delta_legacy': r.patched_delta_legacy,
             'delta_change': r.delta_change,
+            'delta_change_legacy': r.delta_change_legacy,
             'action_flipped': r.action_flipped,
-            'effect_size': r.effect_size
+            'effect_size': r.effect_size,
+            'effect_size_legacy': r.effect_size_legacy,
         })
 
     df = pd.DataFrame(rows)

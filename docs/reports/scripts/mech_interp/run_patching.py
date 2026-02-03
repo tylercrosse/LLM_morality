@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple
 
 # Add project root to path
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from mech_interp.model_loader import LoRAModelLoader
@@ -70,10 +70,20 @@ def run_patching_experiment(
 
     # Load models
     print("\nLoading models...")
-    source_model = LoRAModelLoader.load_hooked_model(source_model_name, device=device)
+    source_model = LoRAModelLoader.load_hooked_model(
+        source_model_name,
+        device=device,
+        merge_lora=False,
+        use_4bit=True,
+    )
     source_model.name = source_model_name
 
-    target_model = LoRAModelLoader.load_hooked_model(target_model_name, device=device)
+    target_model = LoRAModelLoader.load_hooked_model(
+        target_model_name,
+        device=device,
+        merge_lora=False,
+        use_4bit=True,
+    )
     target_model.name = target_model_name
 
     # Get action tokens
@@ -100,7 +110,7 @@ def run_patching_experiment(
 
         # Get baseline
         baseline_delta, baseline_action = patcher.get_baseline_behavior(prompt_text)
-        print(f"  Baseline: {baseline_action} (Δ={baseline_delta:.3f})")
+        print(f"  Baseline: {baseline_action} (Δseq={baseline_delta:.3f})")
 
         # Systematic patching
         print(f"  Patching all components...")
@@ -112,7 +122,7 @@ def run_patching_experiment(
 
         # Top effects
         top_5 = sorted(results, key=lambda x: abs(x.delta_change), reverse=True)[:5]
-        print(f"  Top component: {top_5[0].patched_component} (Δ change={top_5[0].delta_change:.3f})")
+        print(f"  Top component: {top_5[0].patched_component} (Δseq change={top_5[0].delta_change:.3f})")
 
         all_results.extend(results)
 

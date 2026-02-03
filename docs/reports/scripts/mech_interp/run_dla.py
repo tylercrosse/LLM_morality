@@ -51,7 +51,12 @@ def run_dla_for_model(
     print(f"{'='*60}")
 
     # Load model
-    hooked_model = LoRAModelLoader.load_hooked_model(model_name, device=device)
+    hooked_model = LoRAModelLoader.load_hooked_model(
+        model_name,
+        device=device,
+        merge_lora=False,
+        use_4bit=True,
+    )
     hooked_model.name = model_name
 
     # Get action tokens
@@ -75,7 +80,11 @@ def run_dla_for_model(
         result.model_name = model_name
 
         # Print summary
-        print(f"    Final Δ(D-C): {result.final_delta:.3f}")
+        print(
+            f"    Final Δseq(a2-a1): {result.final_delta:.3f} "
+            f"(pref={result.final_preferred_action}, p_action2={result.final_p_action2:.3f})"
+        )
+        print(f"    Legacy final Δ(Dtoken-Ctoken): {result.final_delta_legacy:.3f}")
 
         # Get top components
         top_comps = attributor.identify_top_components(result, top_k=5)
@@ -154,7 +163,7 @@ def generate_visualizations(
                 visualizer.plot_mlp_contributions(
                     result,
                     ax=axes[idx],
-                    title=f"{label}\nΔ={result.final_delta:.2f}"
+                    title=f"{label}\nΔseq={result.final_delta:.2f}"
                 )
 
         fig.suptitle(f"MLP Contributions: {scenario}", fontsize=14, y=0.98)
@@ -214,6 +223,10 @@ def export_results(
                     rows.append({
                         'model': result.model_name,
                         'scenario': result.scenario,
+                        'final_delta_seq': result.final_delta,
+                        'final_delta_legacy': result.final_delta_legacy,
+                        'final_p_action2': result.final_p_action2,
+                        'final_preferred_action': result.final_preferred_action,
                         'component_type': 'head',
                         'layer': layer_idx,
                         'head': head_idx,
@@ -224,6 +237,10 @@ def export_results(
                 rows.append({
                     'model': result.model_name,
                     'scenario': result.scenario,
+                    'final_delta_seq': result.final_delta,
+                    'final_delta_legacy': result.final_delta_legacy,
+                    'final_p_action2': result.final_p_action2,
+                    'final_preferred_action': result.final_preferred_action,
                     'component_type': 'mlp',
                     'layer': layer_idx,
                     'head': -1,

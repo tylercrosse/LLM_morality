@@ -70,6 +70,7 @@ def run_full_analysis(
     # Storage for results
     all_trajectories = {}  # scenario -> model_id -> trajectory
     final_deltas = {}  # scenario -> model_id -> final_delta
+    final_sequence_deltas = {}  # scenario -> model_id -> delta logP(action2) - logP(action1)
     decision_stats = []  # Per-variant stats
     aggregate_stats = []  # Per (scenario, model) stats
     all_variant_trajectories = {}  # scenario -> model_id -> variant_id -> trajectory
@@ -82,6 +83,7 @@ def run_full_analysis(
 
         all_trajectories[scenario] = {}
         final_deltas[scenario] = {}
+        final_sequence_deltas[scenario] = {}
         all_variant_trajectories[scenario] = {}
 
         # Get all prompt variants for this scenario
@@ -98,22 +100,31 @@ def run_full_analysis(
             print(f"  Analyzing {MODEL_LABELS[model_id]}...")
 
             # Load model
-            model = LoRAModelLoader.load_hooked_model(model_id)
+            model = LoRAModelLoader.load_hooked_model(
+                model_id,
+                merge_lora=False,
+                use_4bit=True,
+            )
 
             # Analyze
             analyzer = LogitLensAnalyzer(model, tokenizer)
             all_variant_trajectories[scenario][model_id] = {}
             variant_trajectories = []
             variant_final_deltas = []
+            variant_sequence_deltas = []
+            variant_p_action2 = []
 
             for prompt_data in prompts:
                 trajectory = analyzer.compute_action_trajectory(prompt_data["prompt"])
                 decision_info = analyzer.analyze_decision_layer(trajectory)
+                sequence_info = analyzer.compute_action_sequence_preference(prompt_data["prompt"])
 
                 variant_id = prompt_data.get("variant", -1)
                 all_variant_trajectories[scenario][model_id][f"v{variant_id}"] = trajectory
                 variant_trajectories.append(trajectory)
                 variant_final_deltas.append(float(trajectory[-1]))
+                variant_sequence_deltas.append(float(sequence_info["delta_logp_action2_minus_action1"]))
+                variant_p_action2.append(float(sequence_info["p_action2"]))
 
                 decision_stats.append({
                     "scenario": scenario,
@@ -127,6 +138,12 @@ def run_full_analysis(
                     "stabilization_layer": decision_info['stabilization_layer'],
                     "max_abs_delta": float(decision_info['max_delta']),
                     "mean_delta": float(decision_info['mean_delta']),
+                    "seq_logp_action1": float(sequence_info["logp_action1"]),
+                    "seq_logp_action2": float(sequence_info["logp_action2"]),
+                    "seq_delta_logp_action2_minus_action1": float(sequence_info["delta_logp_action2_minus_action1"]),
+                    "seq_p_action1": float(sequence_info["p_action1"]),
+                    "seq_p_action2": float(sequence_info["p_action2"]),
+                    "seq_preferred_action": sequence_info["preferred_action"],
                 })
 
             mean_trajectory = np.mean(np.stack(variant_trajectories, axis=0), axis=0)
@@ -135,6 +152,7 @@ def run_full_analysis(
             # Store aggregate results for visualization and summary
             all_trajectories[scenario][model_id] = mean_trajectory
             final_deltas[scenario][model_id] = float(mean_trajectory[-1])
+            final_sequence_deltas[scenario][model_id] = float(np.mean(variant_sequence_deltas))
 
             aggregate_stats.append({
                 "scenario": scenario,
@@ -149,12 +167,19 @@ def run_full_analysis(
                 "stabilization_layer": mean_decision_info['stabilization_layer'],
                 "max_abs_delta": float(mean_decision_info['max_delta']),
                 "mean_delta": float(mean_decision_info['mean_delta']),
+                "seq_delta_logp_mean": float(np.mean(variant_sequence_deltas)),
+                "seq_delta_logp_std": float(np.std(variant_sequence_deltas)),
+                "seq_delta_logp_min": float(np.min(variant_sequence_deltas)),
+                "seq_delta_logp_max": float(np.max(variant_sequence_deltas)),
+                "seq_p_action2_mean": float(np.mean(variant_p_action2)),
             })
 
             print(
                 f"    Final Δ (mean±std over variants): "
                 f"{np.mean(variant_final_deltas):.2f}±{np.std(variant_final_deltas):.2f} "
                 f"({'Defect' if mean_trajectory[-1] > 0 else 'Cooperate'})"
+                f" | Seq ΔlogP(a2-a1): {np.mean(variant_sequence_deltas):.2f}±{np.std(variant_sequence_deltas):.2f} "
+                f"({'Defect' if np.mean(variant_sequence_deltas) > 0 else 'Cooperate'})"
             )
 
             # Cleanup
@@ -187,16 +212,28 @@ def run_full_analysis(
     )
     print("   ✓ Grid complete")
 
-    # 3. Heatmap of final preferences
+    # 3. Heatmap of final preferences (single-token logit lens)
     print("\n3. Creating final preferences heatmap...")
     LogitLensVisualizer.plot_final_comparison_heatmap(
         final_deltas,
-        output_dir / "final_preferences_heatmap.png"
+        output_dir / "final_preferences_heatmap.png",
+        title="Final Layer Preferences (Single-Token Logit Lens)",
+        colorbar_label="Logit(action2 digit) - Logit(action1 digit)",
     )
     print("   ✓ Heatmap complete")
 
+    # 4. Heatmap of sequence preferences (faithful to generated action string)
+    print("\n4. Creating sequence preference heatmap...")
+    LogitLensVisualizer.plot_final_comparison_heatmap(
+        final_sequence_deltas,
+        output_dir / "sequence_preferences_heatmap.png",
+        title="Action Sequence Preference (Δ logP(action2)-logP(action1))",
+        colorbar_label="Δ logP(action2) - logP(action1)",
+    )
+    print("   ✓ Sequence heatmap complete")
+
     # Save statistics
-    print("\n4. Saving statistics...")
+    print("\n5. Saving statistics...")
     stats_df = pd.DataFrame(aggregate_stats)
     stats_path = output_dir / "decision_statistics.csv"
     stats_df.to_csv(stats_path, index=False)
@@ -246,6 +283,13 @@ def run_full_analysis(
     print(summary)
     print()
 
+    seq_summary = stats_df.groupby('scenario').agg({
+        'seq_delta_logp_mean': ['mean', 'std', 'min', 'max']
+    }).round(3)
+    print("Sequence Δ logP(action2-action1) by Scenario (across all models):")
+    print(seq_summary)
+    print()
+
     # Group by model and show statistics
     model_summary = stats_df.groupby('model_name').agg({
         'final_delta_mean': ['mean', 'std']
@@ -254,6 +298,12 @@ def run_full_analysis(
     print("\nFinal Δ Logit by Model (across all scenarios):")
     print(model_summary)
 
+    seq_model_summary = stats_df.groupby('model_name').agg({
+        'seq_delta_logp_mean': ['mean', 'std']
+    }).round(3)
+    print("\nSequence Δ logP(action2-action1) by Model (across all scenarios):")
+    print(seq_model_summary)
+
     print("\n" + "="*70)
     print("✓ ANALYSIS COMPLETE!")
     print("="*70)
@@ -261,7 +311,8 @@ def run_full_analysis(
     print("\nKey files:")
     print(f"  • comparison_*.png - Per-scenario model comparisons (mean over variants)")
     print(f"  • all_scenarios_grid.png - Grid of all scenarios (mean over variants)")
-    print(f"  • final_preferences_heatmap.png - Heatmap across models/scenarios")
+    print(f"  • final_preferences_heatmap.png - Single-token final-layer heatmap")
+    print(f"  • sequence_preferences_heatmap.png - Sequence log-prob preference heatmap")
     print(f"  • decision_statistics.csv - Aggregate statistics")
     print(f"  • decision_statistics_by_variant.csv - Per-variant statistics")
     print(f"  • trajectories.json - Mean trajectories")
