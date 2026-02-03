@@ -10,6 +10,6 @@ ray_results/
 .DS_Store
 
 # Mechanistic interpretability generated outputs
-mech_interp_outputs/
 *.log
 *_smoke/
+mech_interp_outputs/attention_analysis/*.json
