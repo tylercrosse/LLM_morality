@@ -297,6 +297,18 @@ They use the same input data - the distinction must be in *how they process* tha
 
 This pushed me toward the final analysis: looking at how components interact with each other.
 
+### The Multi-Level Investigation: Where Do Differences Actually Emerge?
+
+At this point, I had systematically ruled out several mechanisms. Let me zoom out and show the complete picture of where similarities and differences exist:
+
+![Multi-level similarity analysis](mech_interp_outputs/synthesis/similarity_cascade.png)
+
+*Figure: Multi-level investigation showing where moral differences emerge. Component activations and attention patterns are nearly identical (>99.9% similar), but component interactions show significant differences (6.8% of pathways differ substantially). This suggests moral fine-tuning rewires how components connect rather than changing which components activate.*
+
+The pattern is striking: nearly perfect similarity in *what* activates and *what* the models attend to, but significant differences in *how* components interact. This visualization captures the systematic investigation process - ruling out mechanisms until finding where differences actually emerge.
+
+The question became: what does it mean for component interactions to differ while everything else stays the same?
+
 ---
 
 ### Component Interaction Analysis: The Network Rewiring Discovery

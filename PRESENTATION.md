@@ -135,5 +135,7 @@
   - component level: highly similar
   - attention level: highly similar
   - interaction level: meaningfully different
+  - Figure:
+    - ![](mech_interp_outputs/synthesis/similarity_cascade.png)
 - Practical implication: targeted interventions should prioritize pathways/hubs, not only broad layer ranges.
 - Next steps: tighten causal tests on key pathways and package the story for paper-ready results.
