@@ -15,16 +15,16 @@
 
 ---
 
-## Phase 1: Infrastructure Setup (Complete ✓)
+## Stage 1: Infrastructure, Validation, and Early Direction (Complete ✓)
 
-### 1.1 Dependencies Installed
+### Dependencies
 - `transformer-lens>=1.14.0` - Mechanistic interpretability framework
 - `circuitsvis>=1.43.0` - Interactive circuit visualizations
 - `einops>=0.7.0` - Tensor operations
 - `peft>=0.10.0` - LoRA model loading
 - `matplotlib`, `seaborn` - Visualizations
 
-### 1.2 Core Infrastructure Implemented
+### Core Infrastructure
 
 #### [mech_interp/utils.py](mech_interp/utils.py)
 - **Action token handling**: Correctly identifies multi-token sequences
@@ -54,9 +54,9 @@ All models: 26 layers, 8 heads, d_model=2304, vocab=256k
 
 ---
 
-## Phase 2: Validation & Initial Analysis (Complete ✓)
+### Validation and Initial Behavioral Analysis
 
-### 2.1 Infrastructure Validation
+#### Infrastructure Validation
 
 **Script**: [scripts/validate_infrastructure.py](scripts/validate_infrastructure.py)
 
@@ -72,7 +72,7 @@ All models: 26 layers, 8 heads, d_model=2304, vocab=256k
 - Activation hooks capture all intermediate states
 - Token IDs correctly identified
 
-### 2.2 Behavioral Analysis - Mutual Cooperation Scenario
+#### Behavioral Analysis: Mutual Cooperation Scenario
 
 **Test Prompt**: Both players cooperated last round (got 3 points each)
 
@@ -87,7 +87,7 @@ All models: 26 layers, 8 heads, d_model=2304, vocab=256k
 - Moral models: Cooperate (aligned with training objectives)
 - No discrimination between strategies in this scenario
 
-### 2.3 Behavioral Analysis - Temptation Scenario
+#### Behavioral Analysis: Temptation Scenario
 
 **Script**: [scripts/test_temptation_scenario.py](scripts/test_temptation_scenario.py)
 
@@ -119,19 +119,19 @@ All models: 26 layers, 8 heads, d_model=2304, vocab=256k
 
 ---
 
-## Key Insights So Far
+### Stage 1 Insights
 
-### What's Working ✓
+#### What Worked ✓
 1. **Infrastructure is robust**: Model loading, caching, logit lens all functional
 2. **Layer-wise analysis reveals computation**: Can track how preference evolves through 26 layers
 3. **Small but measurable differences**: Moral models are 0.04-0.09 more cooperative than strategic
 
-### Interesting Findings
+#### Notable Findings
 1. **Strategic model cooperates**: Even in temptation! Learned from Tit-for-Tat training
 2. **Convergent behavior**: All fine-tuning approaches lead to similar final outputs
 3. **Internal circuits may differ**: Despite similar outputs, layer-wise evolution shows variation
 
-### Why Mechanistic Analysis is Still Valuable
+#### Why Mechanistic Analysis Is Still Valuable
 
 Even with similar final outputs, the full analysis pipeline will reveal:
 
@@ -152,9 +152,9 @@ Even with similar final outputs, the full analysis pipeline will reveal:
 
 ---
 
-## Next Steps
+### Stage 1 Planned Next Steps
 
-### Immediate Tasks (Phase 3: Full Pipeline Implementation)
+#### Immediate Tasks (Planned Stage 2 Pipeline)
 
 1. **Prompt Generator** ([mech_interp/prompt_generator.py](mech_interp/prompt_generator.py))
    - Generate 15-20 controlled IPD scenarios
@@ -180,7 +180,7 @@ Even with similar final outputs, the full analysis pipeline will reveal:
    - Measure behavioral flips
    - Identify minimal circuit for moral override
 
-### Alternative Investigation Paths
+#### Alternative Investigation Paths
 
 1. **Review Training Data**:
    - Examine prompts from [src/fine_tune.py](src/fine_tune.py)
@@ -194,9 +194,9 @@ Even with similar final outputs, the full analysis pipeline will reveal:
 
 ---
 
-## Technical Notes
+### Stage 1 Technical Notes
 
-### Model Architecture (Gemma-2-2b-it)
+#### Model Architecture (Gemma-2-2b-it)
 - **Layers**: 26
 - **Heads**: 8 per layer
 - **d_model**: 2304
@@ -204,19 +204,19 @@ Even with similar final outputs, the full analysis pipeline will reveal:
 - **Normalization**: RMSNorm (applied before final projection)
 - **Attention**: Standard multi-head (not sliding window for analysis)
 
-### LoRA Configuration
+#### LoRA Configuration
 - **Rank**: 64
 - **Alpha**: 32
 - **Dropout**: 0.05
 - **Target modules**: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
 - **Trainable params**: ~332MB per adapter vs 2.2GB full model
 
-### Action Token Encoding
+#### Action Token Encoding
 - Training uses `action1` (Cooperate) and `action2` (Defect)
 - Multi-token sequences: "action" [2314] + digit [235274/235284]
 - For logit analysis, compare on differentiating token (last token)
 
-### Hook Points Available
+#### Hook Points Available
 Per layer:
 - `blocks.{i}.hook_resid_post` - Residual stream after layer
 - `blocks.{i}.hook_attn_out` - Attention output (before residual add)
@@ -226,7 +226,7 @@ Total: 78 cached tensors per forward pass (26 layers × 3 components)
 
 ---
 
-## Visualizations Generated
+### Stage 1 Visualizations
 
 1. **![Mutual Cooperation Trajectories](mech_interp_outputs/validation/logit_trajectories.png)**
    - Layer-wise evolution for all 5 models
@@ -243,7 +243,7 @@ Total: 78 cached tensors per forward pass (26 layers × 3 components)
 
 ---
 
-## Open Questions
+### Stage 1 Open Questions
 
 1. **Why do strategic models cooperate in temptation?**
    - Is this the correct behavior from training?
@@ -266,18 +266,18 @@ Total: 78 cached tensors per forward pass (26 layers × 3 components)
 
 ---
 
-## Files Created
+### Stage 1 Files Created
 
-### Core Infrastructure
+#### Core Infrastructure
 - `mech_interp/__init__.py` - Module initialization
 - `mech_interp/utils.py` - Shared utilities (393 lines)
 - `mech_interp/model_loader.py` - Model loading & caching (295 lines)
 
-### Validation Scripts
+#### Validation Scripts
 - `scripts/validate_infrastructure.py` - Comprehensive validation (280 lines)
 - `scripts/test_temptation_scenario.py` - Temptation scenario test (245 lines)
 
-### Outputs
+#### Outputs
 - `mech_interp_outputs/validation/` - Visualization directory
   - `logit_trajectories.png`
   - `final_comparison.png`
@@ -285,7 +285,7 @@ Total: 78 cached tensors per forward pass (26 layers × 3 components)
 
 ---
 
-## References
+### Stage 1 References
 
 - **Original Paper**: Siu et al., "Cooperation, Competition, and Maliciousness: LLM-Stakeholders Interactive Negotiation" (2024)
 - **Framework**: Neel Nanda's TransformerLens library
@@ -294,7 +294,7 @@ Total: 78 cached tensors per forward pass (26 layers × 3 components)
 
 ---
 
-## Phase 2: Analysis Results (Complete ✓)
+## Stage 2: Core Component Analyses (Complete ✓)
 
 ### Task 2: Logit Lens Analysis (Complete ✓)
 
@@ -529,7 +529,7 @@ The logit lens lacks the granularity to detect pathway-level differences—it on
 
 ↓ Leads to ↓
 
-**Interaction Analysis** (Phase 3):
+**Interaction Analysis** (later Stage 4):
 - Pathway-level wiring differences
 - Discovered L2_MLP routing switch mechanism
 - Explains how similar components produce different behaviors
@@ -710,9 +710,9 @@ MLPs dominate the attribution, particularly L8/L9.
 
 ---
 
-## Research Question Answers (Preliminary)
+### Stage 2 Research Question Snapshot
 
-### RQ1: How are "selfish" attention heads suppressed during moral fine-tuning?
+#### RQ1: How are "selfish" attention heads suppressed during moral fine-tuning?
 
 **Answer**: They aren't suppressed - they're rebalanced!
 
@@ -725,7 +725,7 @@ MLPs dominate the attribution, particularly L8/L9.
 
 **Mechanism**: Moral reasoning emerges from subtle adjustments to the balance and interaction between components, not from suppressing individual "selfish" circuits. The architecture is highly robust and distributed.
 
-### RQ2: Do Deontological vs. Utilitarian agents develop distinct circuit structures?
+#### RQ2: Do Deontological vs. Utilitarian agents develop distinct circuit structures?
 
 **Partial Answer** (awaiting cross-patching results):
 
@@ -741,7 +741,7 @@ MLPs dominate the attribution, particularly L8/L9.
 
 **Hypothesis**: Moral frameworks use similar components but with different interaction patterns. Cross-patching will reveal distinguishing circuits.
 
-### RQ3: Can we identify which parts of the model to fine-tune specifically?
+#### RQ3: Can we identify which parts of the model to fine-tune specifically?
 
 **Preliminary Answer**: Focus on mid-late layer MLPs!
 
@@ -763,23 +763,23 @@ MLPs dominate the attribution, particularly L8/L9.
 
 ---
 
-## Files Created (Phase 2)
+### Stage 2 Files Created
 
-### Analysis Modules
+#### Analysis Modules
 - `mech_interp/prompt_generator.py` - IPD evaluation dataset (268 lines)
 - `mech_interp/logit_lens.py` - Layer-wise trajectory analysis (450 lines)
 - `mech_interp/direct_logit_attribution.py` - Component attribution (365 lines)
 - `mech_interp/activation_patching.py` - Causal circuit discovery (550 lines)
 
-### Execution Scripts
+#### Execution Scripts
 - `scripts/mech_interp/run_logit_lens.py` - Full logit lens pipeline (280 lines)
 - `scripts/mech_interp/run_dla.py` - DLA analysis pipeline (355 lines)
 - `scripts/mech_interp/run_patching.py` - Patching experiments (400 lines)
 
-### Documentation
+#### Documentation
 - `mech_interp/README.md` - Comprehensive usage guide (600 lines)
 
-### Outputs Generated
+#### Outputs Generated
 - `mech_interp_outputs/prompt_datasets/ipd_eval_prompts.json` - 15 evaluation prompts
 - `mech_interp_outputs/dla/*.png` - Head heatmaps, MLP plots, component rankings
 - `mech_interp_outputs/dla/*.csv` - Full results (17,550 rows), summaries, top components
@@ -793,7 +793,7 @@ MLPs dominate the attribution, particularly L8/L9.
 
 ---
 
-## Phase 2: RQ2 Cross-Patching Analysis (Complete ✓)
+## Stage 3: RQ2 Cross-Patching Analysis (Complete ✓)
 
 **Date Completed**: February 2, 2026
 
@@ -807,7 +807,7 @@ MLPs dominate the attribution, particularly L8/L9.
 - Mean effects: De→Ut +0.0027, Ut→De -0.0109
 - 4.1x asymmetry (Ut→De stronger)
 
-### RQ2: FINAL ANSWER ✓
+### RQ2 Final Answer ✓
 
 **Do Deontological vs. Utilitarian agents develop distinct circuit structures?**
 
@@ -927,9 +927,9 @@ MLPs dominate the attribution, particularly L8/L9.
 
 ---
 
-## Updated Research Question Answers (FINAL)
+### Updated Research Question Answers (Post Stage 3)
 
-### RQ1: How are "selfish" attention heads suppressed during moral fine-tuning? ✓
+#### RQ1: How are "selfish" attention heads suppressed during moral fine-tuning? ✓
 
 **Answer**: They aren't suppressed - they're rebalanced through distributed adjustments!
 
@@ -937,7 +937,7 @@ MLPs dominate the attribution, particularly L8/L9.
 
 **Key Finding**: Behavior change without architectural change - robust, distributed representation.
 
-### RQ2: Do Deontological vs. Utilitarian agents develop distinct circuit structures? ✓
+#### RQ2: Do Deontological vs. Utilitarian agents develop distinct circuit structures? ✓
 
 **Answer**: No, they develop highly similar structures with subtle distinctions through distributed reweighting.
 
@@ -945,7 +945,7 @@ MLPs dominate the attribution, particularly L8/L9.
 
 **Key Finding**: Convergent moral computation with shared substrate. Different ethical training objectives produce similar circuits with different weightings.
 
-### RQ3: Can we identify which parts of the model to fine-tune specifically?
+#### RQ3: Can we identify which parts of the model to fine-tune specifically?
 
 **Answer**: Focus on mid-late layer MLPs (L11-L23), distinguish Strategic/Moral vs. De/Ut boundaries.
 
@@ -957,16 +957,16 @@ MLPs dominate the attribution, particularly L8/L9.
 
 ---
 
-## Final Status
+### Status Snapshot (Post Stage 3)
 
-**Phase 1**: Infrastructure ✓  
-**Phase 2**: Analysis ✓
+**Stage 1**: Infrastructure + validation ✓  
+**Stage 2**: Core analyses ✓
 - Logit Lens ✓
 - Direct Logit Attribution (DLA) ✓
 - Activation Patching (4/4 experiments) ✓
 - RQ2 Cross-Patching Analysis ✓
 
-**Phase 3**: Attention & Interaction Analysis ✓
+**Stage 3**: RQ2 cross-patching ✓
 
 **All Research Questions Answered**: ✓
 
@@ -992,17 +992,17 @@ MLPs dominate the attribution, particularly L8/L9.
 
 ---
 
-## Phase 3: Attention & Interaction Analysis (Complete ✓)
+## Stage 4: Attention and Interaction Analysis (Complete ✓)
 
-**Date Completed**: February 2, 2026 (Afternoon)
+**Date Completed**: February 2, 2026 (Afternoon/Evening)
 
-Following the comprehensive RQ2 analysis, we implemented two additional mechanistic interpretability methods to investigate **how** similar circuits produce different behaviors:
+Following Stage 3 RQ2 cross-patching analysis, we implemented two additional mechanistic interpretability methods to investigate **how** similar circuits produce different behaviors:
 1. **Attention Pattern Analysis**: What information do models attend to?
 2. **Component Interaction Analysis**: How do components coordinate?
 
 ---
 
-### 3.1 Attention Pattern Analysis
+### Attention Pattern Analysis
 
 **Script**: [scripts/mech_interp/run_attention_analysis.py](scripts/mech_interp/run_attention_analysis.py)  
 **Implementation**: [mech_interp/attention_analysis.py](mech_interp/attention_analysis.py)
@@ -1041,7 +1041,7 @@ Models show **99.99% identical attention patterns** across all scenarios. Differ
 
 ---
 
-### 3.2 Component Interaction Analysis
+### Component Interaction Analysis
 
 **Script**: [scripts/mech_interp/run_component_interactions.py](scripts/mech_interp/run_component_interactions.py)  
 **Implementation**: [mech_interp/component_interactions.py](mech_interp/component_interactions.py)
@@ -1105,7 +1105,7 @@ Models show **99.99% identical attention patterns** across all scenarios. Differ
 
 ---
 
-### 3.3 Universal Components Have Different Connectivity
+### Universal Components Have Different Connectivity
 
 **L8_MLP and L9_MLP** (identified in DLA as universal cooperation/defection encoders):
 
@@ -1127,7 +1127,7 @@ Models show **99.99% identical attention patterns** across all scenarios. Differ
 
 ---
 
-### 3.4 Validation: Pathway Differences Predict Behavioral Asymmetry
+### Validation: Pathway Differences Predict Behavioral Asymmetry
 
 **Analysis**: Correlation between pathway difference magnitude and cross-patching asymmetry
 
@@ -1143,7 +1143,7 @@ Models show **99.99% identical attention patterns** across all scenarios. Differ
 
 ---
 
-### 3.5 Updated RQ2 Answer (DEFINITIVE)
+### Updated RQ2 Answer (Definitive)
 
 **RQ2: Do Deontological vs. Utilitarian agents develop distinct circuit structures?**
 
@@ -1170,7 +1170,7 @@ Models show **99.99% identical attention patterns** across all scenarios. Differ
 
 ---
 
-### 3.6 Mechanistic Model of Moral Reasoning
+### Mechanistic Model of Moral Reasoning
 
 ```
 INPUT (IPD scenario)
@@ -1197,9 +1197,11 @@ OUTPUT (Same components, different routing = different behavior)
 
 ---
 
-## Final Research Question Answers (COMPLETE)
+## Stage 5: Final Synthesis, Deliverables, and Closeout (Complete ✓)
 
-### RQ1: How are "selfish" attention heads suppressed during moral fine-tuning? ✓
+### Final Research Question Answers
+
+#### RQ1: How are "selfish" attention heads suppressed during moral fine-tuning? ✓
 
 **Answer**: They aren't suppressed - they're rebalanced through distributed adjustments!
 
@@ -1208,7 +1210,7 @@ OUTPUT (Same components, different routing = different behavior)
 - L8_MLP (pro-Defect) actually increased in moral models
 - Distributed encoding across 180+ components
 
-### RQ2: Do Deontological vs. Utilitarian agents develop distinct circuit structures? ✓
+#### RQ2: Do Deontological vs. Utilitarian agents develop distinct circuit structures? ✓
 
 **Answer**: No (same components & attention) but YES (drastically different wiring)!
 
@@ -1220,7 +1222,7 @@ OUTPUT (Same components, different routing = different behavior)
 
 **Breakthrough**: First demonstration that moral fine-tuning operates through **network rewiring**.
 
-### RQ3: Can we identify which parts of the model to fine-tune specifically? ✓
+#### RQ3: Can we identify which parts of the model to fine-tune specifically? ✓
 
 **Original Answer**: Target mid-late MLPs (L11-L23)
 
@@ -1237,9 +1239,9 @@ OUTPUT (Same components, different routing = different behavior)
 
 ---
 
-## Complete Deliverables
+### Complete Deliverables
 
-### Code Implementation
+#### Code Implementation
 - ✓ Infrastructure (model loading, caching, hooks)
 - ✓ Logit Lens analysis
 - ✓ Direct Logit Attribution (DLA)
@@ -1249,13 +1251,13 @@ OUTPUT (Same components, different routing = different behavior)
 
 **Total Lines**: ~4,500 across 12 modules
 
-### Analysis Outputs
+#### Analysis Outputs
 - ✓ 17,550 DLA component attributions (5 models × 234 components × 15 scenarios)
 - ✓ 21,060 activation patches (4 experiments × 234 components × 15 scenarios)
 - ✓ **15 attention pattern analyses** (2 models × 15 scenarios) (NEW)
 - ✓ **1,326 pathway correlations** (52 components × 52 components) (NEW)
 
-### Documentation
+#### Documentation
 - ✓ [RQ2_ANALYSIS_RESULTS.md](RQ2_ANALYSIS_RESULTS.md) - Comprehensive statistical analysis
 - ✓ [ATTENTION_AND_INTERACTION_ANALYSIS.md](ATTENTION_AND_INTERACTION_ANALYSIS.md) - Methodology
 - ✓ [RQ2_FINAL_ANSWER.md](RQ2_FINAL_ANSWER.md) - Complete interpretation (20 pages)
@@ -1265,7 +1267,7 @@ OUTPUT (Same components, different routing = different behavior)
 
 **Total Documentation**: ~30,000 words
 
-### Visualizations
+#### Visualizations
 - ✓ Component rankings (5 models)
 - ✓ MLP contributions (cross-scenario)
 - ✓ Head heatmaps (26×8 grids)
@@ -1279,9 +1281,9 @@ OUTPUT (Same components, different routing = different behavior)
 
 ---
 
-## Key Contributions to Mechanistic Interpretability
+### Key Contributions to Mechanistic Interpretability
 
-### 1. Methodological Contribution
+#### Methodological Contribution
 
 **Beyond Component-Level Analysis**:
 - Demonstrated that component strengths alone are insufficient
@@ -1293,7 +1295,7 @@ OUTPUT (Same components, different routing = different behavior)
 - 99.99% similar in attention
 - Yet drastically different in behavior through **different wiring**
 
-### 2. Empirical Contribution
+#### Empirical Contribution
 
 **First Demonstration**:
 - Moral fine-tuning operates through network rewiring
@@ -1305,7 +1307,7 @@ OUTPUT (Same components, different routing = different behavior)
 - Pathway differences correlate with behavioral asymmetry (r=0.67)
 - Consistent patterns across all 5 game scenarios
 
-### 3. Theoretical Contribution
+#### Theoretical Contribution
 
 **Challenges Assumptions**:
 - Not "selfish circuits are suppressed"
@@ -1318,9 +1320,9 @@ OUTPUT (Same components, different routing = different behavior)
 
 ---
 
-## Publication Strategy
+### Publication Strategy
 
-### Recommended Framing
+#### Recommended Framing
 
 **Title**: "Moral Reasoning Through Rewiring: How Fine-Tuning Changes Neural Pathways, Not Components"
 
@@ -1337,7 +1339,7 @@ OUTPUT (Same components, different routing = different behavior)
 - ICLR 2027 (Full paper)
 - Nature Machine Intelligence (if extended)
 
-### Key Figures for Paper
+#### Key Figures for Paper
 
 1. **Three-Level Similarity Cascade** (shows component → attention → interaction)
 2. **L2_MLP Network Diagram** (shows opposite connectivity patterns)
@@ -1346,7 +1348,7 @@ OUTPUT (Same components, different routing = different behavior)
 
 ---
 
-## Timeline
+### Timeline
 
 - **Feb 2, 2026 (Morning)**: Infrastructure + DLA + Initial patching
 - **Feb 2, 2026 (Afternoon)**: Cross-patching + Statistical analysis
@@ -1362,7 +1364,7 @@ OUTPUT (Same components, different routing = different behavior)
 
 ---
 
-## Final Status: COMPLETE ✓
+### Final Status (Complete) ✓
 
 All three research questions definitively answered with comprehensive mechanistic evidence. Ready for paper writing and publication.
 
@@ -1371,4 +1373,4 @@ All three research questions definitively answered with comprehensive mechanisti
 ---
 
 **Final Update**: February 2, 2026 (Evening)  
-**Status**: Research complete, ready for publication
+**Status**: Research complete, ready for publication (all stages complete)
