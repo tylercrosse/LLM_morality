@@ -228,15 +228,15 @@ Total: 78 cached tensors per forward pass (26 layers × 3 components)
 
 ## Visualizations Generated
 
-1. **[Mutual Cooperation Trajectories](mech_interp_outputs/validation/logit_trajectories.png)**
+1. **![Mutual Cooperation Trajectories](mech_interp_outputs/validation/logit_trajectories.png)**
    - Layer-wise evolution for all 5 models
    - Shows similar paths, all ending in Cooperate preference
 
-2. **[Mutual Cooperation Final](mech_interp_outputs/validation/final_comparison.png)**
+2. **![Mutual Cooperation Final](mech_interp_outputs/validation/final_comparison.png)**
    - Bar chart of final layer preferences
    - All models: Δ logit ≈ -1.55 (minimal variation)
 
-3. **[Temptation Scenario](mech_interp_outputs/validation/temptation_scenario.png)**
+3. **![Temptation Scenario](mech_interp_outputs/validation/temptation_scenario.png)**
    - Layer-wise evolution + final preferences
    - Small differences: moral models slightly more cooperative
    - Strategic: -1.77, Moral avg: -1.80, Δ = 0.04
@@ -308,7 +308,233 @@ Total: 78 cached tensors per forward pass (26 layers × 3 components)
 - **DC_exploited**: Defected on cooperator
 - **DD_trapped**: Mutual defection cycle
 
-**Status**: Ready to run (infrastructure complete, DLA/patching priorities)
+**Date Completed**: February 2, 2026
+
+#### Key Findings
+
+##### 1. Universal Cooperation Bias Across All Models
+
+All models (including the base, untrained model) show strong Cooperate preference at the final layer:
+
+| Scenario | Final Δ Logit Range | Interpretation |
+|----------|-------------------|----------------|
+| CC_continue | -1.19 to -1.33 | Strong Cooperate preference |
+| **CC_temptation** | **-1.54 to -1.57** | **Strongest Cooperate** (resisting betrayal temptation) |
+| CD_punished | -1.17 to -1.41 | Cooperate even after being betrayed |
+| **DC_exploited** | **-1.10 to -1.21** | **Weakest Cooperate** ("guilt effect") |
+| DD_trapped | -1.09 to -1.21 | Mutual defection, still prefers Cooperate |
+
+**Δ Logit**: `logit(Defect) - logit(Cooperate)`. Negative values indicate Cooperate preference.
+
+**Key insight**: All scenarios show negative delta (Cooperate > Defect), even in temptation scenarios where defection yields higher personal payoff. The base model already encodes strong cooperation bias before any fine-tuning.
+
+##### 2. Early Decision Formation (Layer 0)
+
+**Most surprising finding**: The cooperation decision is present from **Layer 0** (the very first layer) across ALL models and scenarios.
+
+| Metric | Value | Interpretation |
+|--------|-------|----------------|
+| **First decision layer** | **0** | Decision bias present immediately |
+| Initial Δ logit (Layer 0) | -8.0 to -10.0 | Very strong initial Cooperate bias |
+| Consistency | 100% (all 75 trajectories) | Universal pattern |
+
+**Implication**: The model doesn't "compute" the cooperation decision through progressive reasoning—it's biased toward cooperation from the start. This suggests pretrained representations encode prosocial behavior, likely from training on human-generated text with cooperative norms.
+
+**No "late moral override"**: We found no evidence of early defection preference being corrected by later layers. The cooperation bias is present throughout.
+
+##### 3. Late Stabilization (Layers 20-24)
+
+Despite early bias, the decision logic continues refining through middle and late layers:
+
+| Metric | Value | Interpretation |
+|--------|-------|----------------|
+| **Stabilization layer** | **20-24** | Final decision solidifies late in network |
+| Middle layer behavior | Oscillation, drift toward zero | Refinement and context integration |
+| Trajectory shape | U-shaped curve | Strong negative → neutral → negative final |
+
+**Trajectory pattern** (typical across all models):
+- **Layers 0-5**: Strong Cooperate bias (Δ ≈ -8 to -10)
+- **Layers 6-15**: Gradual drift toward neutral (Δ → 0)
+- **Layers 16-25**: Return to negative, stabilize around Δ ≈ -1.5
+
+**Interpretation**: Early layers encode a default cooperation stance. Middle layers integrate context (opponent history, payoffs, scenario). Late layers solidify the final decision, which remains cooperative but with reduced confidence compared to Layer 0.
+
+##### 4. Model Similarity Despite Different Training
+
+Fine-tuned models show **nearly identical trajectories** to the base model:
+
+| Model Pair Comparison | Mean Trajectory Difference | Max Layer Difference |
+|----------------------|---------------------------|---------------------|
+| Base vs Strategic | 0.04 | 0.12 |
+| Base vs Deontological | 0.06 | 0.15 |
+| Base vs Utilitarian | 0.05 | 0.13 |
+| Strategic vs Deontological | 0.02 | 0.08 |
+| Deontological vs Utilitarian | 0.03 | 0.09 |
+
+**Findings**:
+- All models follow the same U-shaped trajectory
+- Differences are subtle (max 0.15 logits vs. base magnitudes of 8-10)
+- No model shows a distinct "decision layer" compared to others
+- Strategic and moral models are indistinguishable at the trajectory level
+
+**Consistency with DLA**: This finding aligns with Direct Logit Attribution results showing 99.9999% component similarity. The layer-wise evolution of logits reflects the underlying component-level similarities.
+
+##### 5. Scenario-Dependent Variation
+
+While all scenarios favor Cooperate, the strength varies systematically:
+
+| Scenario | Mean Final Δ | Std Dev | Interpretation |
+|----------|--------------|---------|----------------|
+| **CC_temptation** | **-1.56** | 0.16 | Strongest: Fighting temptation to betray |
+| CD_punished | -1.32 | 0.16 | Strong: Forgiving after betrayal |
+| CC_continue | -1.31 | 0.17 | Strong: Maintaining cooperation |
+| DD_trapped | -1.19 | 0.10 | Moderate: Breaking mutual defection |
+| **DC_exploited** | **-1.15** | 0.10 | **Weakest: Continuing to exploit** |
+
+**Range**: 0.41 logits (modest variation given the strong overall bias).
+
+**Pattern**: The model shows strongest cooperation when resisting temptation (CC_temptation) and weakest when it has already betrayed a cooperator (DC_exploited). This "guilt effect" is present even in the base model.
+
+**Scenario sensitivity**: DC_exploited shows the smallest Cooperate preference, suggesting the model recognizes exploitation and reduces cooperation accordingly—but still doesn't flip to defection.
+
+#### Implications for Research Questions
+
+##### RQ1: How are "selfish" heads suppressed during moral fine-tuning?
+
+**Logit lens evidence**:
+- No "late-layer moral override" pattern observed
+- Cooperation bias present from Layer 0 across all models
+- Trajectory shapes identical for strategic vs. moral models
+- Differences too subtle to indicate circuit-level suppression
+
+**Interpretation**: Supports the **distributed representation hypothesis** from DLA. If moral fine-tuning were suppressing specific "selfish circuits," we'd expect to see:
+- ❌ Late-layer corrections (not observed)
+- ❌ Distinct decision layers in moral vs. strategic models (not observed)
+- ❌ Strategic model showing early defection bias (not observed)
+
+**Consistent with DLA finding**: Max component change of 0.047 is too small to show up at the trajectory level (differences ~0.04 logits).
+
+##### RQ2: Do Deontological vs. Utilitarian develop distinct circuits?
+
+**Logit lens evidence**:
+- Both moral models show identical trajectory shapes
+- No distinct decision layers or stabilization points
+- Scenario-specific differences are minimal (<0.03 logits)
+- Both resist temptation equally (CC_temptation: -1.54 vs -1.57)
+
+**Interpretation**: Layer-wise decision evolution doesn't distinguish moral frameworks. This is consistent with the **pathway rewiring mechanism** discovered through interaction analysis:
+- Same components (DLA: 99.9999% similar)
+- Same attention patterns (99.99% similar)
+- Different component interactions (29 pathways differ)
+
+The logit lens lacks the granularity to detect pathway-level differences—it only shows the aggregate output at each layer.
+
+##### RQ3: Can we identify which layers to fine-tune?
+
+**Logit lens recommendations**:
+
+1. **Layer 0 bias is pretrained**: Fine-tuning doesn't alter the initial cooperation stance. This suggests targeting Layer 0 would be ineffective or counterproductive.
+
+2. **Stabilization in layers 20-24**: Final decision solidifies in late layers, consistent with DLA showing changes concentrated in L11-L23 MLPs.
+
+3. **Middle layers (6-15) refine context**: The drift toward neutral and back suggests these layers integrate scenario-specific information.
+
+**Combined with DLA**:
+- Focus fine-tuning on **L11-L23 MLPs** (largest DLA changes)
+- Leave L0-L5 frozen (context processing, minimal DLA changes)
+- Leave L8/L9 frozen (universal cooperation/defection encoding)
+- May achieve similar results with **50% fewer trainable parameters**
+
+#### Visualizations Generated
+
+**All visualizations located in**: `mech_interp_outputs/logit_lens/`
+
+![All Scenarios Grid](mech_interp_outputs/logit_lens/all_scenarios_grid.png)
+*Figure 1: Layer-wise decision trajectories for all 5 models across all 5 scenarios. Models show nearly identical U-shaped curves: strong initial Cooperate bias → mid-layer refinement → stabilization around layer 20-24.*
+
+![Final Preferences Heatmap](mech_interp_outputs/logit_lens/final_preferences_heatmap.png)
+*Figure 2: Heatmap of final layer (Layer 25) action preferences. All cells are blue (negative delta), indicating universal Cooperate preference. Strongest: CC_temptation (-1.56). Weakest: DC_exploited (-1.15).*
+
+**Per-scenario trajectory plots**:
+- `comparison_CC_continue.png`: Mutual cooperation maintenance
+- `comparison_CC_temptation.png`: Cooperation with defection temptation
+- `comparison_CD_punished.png`: Cooperated but got defected on
+- `comparison_DC_exploited.png`: Defected on cooperator (guilt effect)
+- `comparison_DD_trapped.png`: Mutual defection cycle
+
+#### Technical Implementation
+
+**Method**: Layer-wise logit projection
+1. Extract hidden state at each layer: `blocks.{i}.hook_resid_post`
+2. Apply RMSNorm: `ln_final(hidden_state)` (Gemma-specific)
+3. Project to vocabulary: `W_U @ hidden_state`
+4. Compute delta: `logit["action2"] - logit["action1"]`
+
+**Action tokens** (multi-token under Gemma tokenizer):
+- `action1` (Cooperate): [2314, 235274]
+- `action2` (Defect): [2314, 235284]
+- Compare on final differentiating token (235274 vs 235284)
+
+**Execution scope**:
+- 5 models × 5 scenarios × 3 variants = **75 trajectories**
+- 27 logit values per trajectory (Layer 0-25 + initial)
+- Runtime: ~15 minutes (with model loading)
+- Memory: ~12 GB peak (activation caching)
+
+#### Data Outputs
+
+**CSV files**:
+- `decision_statistics.csv`: 26 rows (5 models × 5 scenarios + header)
+  - Aggregated statistics (mean over 3 variants)
+  - Columns: final_delta_mean/std/min/max, first_decision_layer, stabilization_layer, max_abs_delta, mean_delta
+- `decision_statistics_by_variant.csv`: 76 rows (75 analyses + header)
+  - Per-variant granular data for consistency checks
+
+**JSON files**:
+- `trajectories.json`: 25 entries (5 scenarios × 5 models)
+  - Mean trajectories (averaged over variants)
+- `trajectories_by_variant.json`: 150 entries (5 scenarios × 5 models × 3 variants)
+  - Raw per-variant trajectories before averaging
+
+#### Limitations
+
+1. **Aggregate view**: Logit lens shows layer-wise sums but doesn't decompose which components (heads, MLPs) drive each layer's contribution. Use DLA for component-level attribution.
+
+2. **No causal verification**: Logit differences are correlational. Use activation patching to test whether specific layers are causally necessary.
+
+3. **Linear projection assumption**: Assumes the unembedding matrix correctly interprets intermediate representations. May not capture non-linear computations.
+
+4. **Action token simplification**: Multi-token actions require choosing which token to analyze (we used the differentiating token). Alternative approaches could aggregate across both tokens.
+
+#### Connection to Other Analyses
+
+**Logit Lens** (this analysis):
+- Layer-wise trajectory evolution
+- Identifies decision timing and stabilization
+- Aggregate view across all components
+
+↓ Leads to ↓
+
+**Direct Logit Attribution** (Task 3):
+- Component-level decomposition (heads, MLPs)
+- Identifies which components drive each layer's contribution
+- Discovered L8/L9 MLP universal functions
+
+↓ Leads to ↓
+
+**Activation Patching** (Task 4):
+- Causal verification of component importance
+- Tests minimal circuits
+- Discovered robust, distributed moral encoding
+
+↓ Leads to ↓
+
+**Interaction Analysis** (Phase 3):
+- Pathway-level wiring differences
+- Discovered L2_MLP routing switch mechanism
+- Explains how similar components produce different behaviors
+
+**Summary**: Logit lens identified the "when" (Layer 0 bias, Layer 20-24 stabilization), DLA identified the "what" (L8/L9 MLPs, component contributions), patching verified the "why" (distributed encoding), and interaction analysis revealed the "how" (pathway rewiring).
 
 ---
 

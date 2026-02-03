@@ -34,7 +34,7 @@
 
 ## Executive Summary
 
-This project applies white-box mechanistic interpretability methods to understand how moral fine-tuning changes the internal computations of LLMs in the Iterated Prisoner's Dilemma (IPD). Using your trained models (PT2-PT4 with deontological/utilitarian reward shaping), we investigated three research questions through **direct logit attribution** and **activation patching**.
+This project applies white-box mechanistic interpretability methods to understand how moral fine-tuning changes the internal computations of LLMs in the Iterated Prisoner's Dilemma (IPD). Using your trained models (PT2-PT4 with deontological/utilitarian reward shaping), we investigated three research questions through **logit lens analysis**, **direct logit attribution**, and **activation patching**.
 
 ### Key Findings
 
@@ -175,6 +175,12 @@ This validation provided confidence that the models successfully learned their r
 
 ### 2.3 Mechanistic Interpretability Methods
 
+**Logit Lens**:
+- Track layer-by-layer evolution of action preferences (Cooperate vs Defect)
+- Project hidden states at each layer through unembedding matrix
+- Identify decision timing (when) and stabilization layers
+- Provides aggregate view of model computation flow
+
 **Direct Logit Attribution (DLA)**:
 - Project each component's output through unembedding matrix
 - Measure contribution to Defect vs Cooperate logits
@@ -217,7 +223,7 @@ We discovered that **Layer 8 and Layer 9 MLPs** have universal, powerful, opposi
 
 These adjacent layers represent the model's core cooperation/defection encoding with effects **7-9x larger** than typical components.
 
-![Top Components - Strategic Model](mech_interp_outputs/dla/dla_top_components_PT2_COREDe.png)
+![Top Components - Strategic Model](../../mech_interp_outputs/dla/dla_top_components_PT2_COREDe.png)
 *Figure 1: Top-20 components for Strategic model (PT2). L8_MLP and L9_MLP dominate.*
 
 #### Model Similarity Despite Different Training
@@ -250,7 +256,7 @@ Comparing PT3 (moral) vs PT2 (strategic):
 
 **Maximum change: 0.047** — tiny compared to base magnitudes of 7-9!
 
-![MLP Contributions - Temptation Scenario](mech_interp_outputs/dla/dla_mlps_CC_temptation.png)
+![MLP Contributions - Temptation Scenario](../../mech_interp_outputs/dla/dla_mlps_CC_temptation.png)
 *Figure 2: MLP contributions in temptation scenario. Models show similar patterns with L8/L9 dominating.*
 
 #### RQ1 Conclusion: Selfish Components Are NOT Suppressed
@@ -280,7 +286,7 @@ The data refutes the "suppression" hypothesis:
 - L0_MLP, all L0 heads in temptation/punishment scenarios: +0.094
 - But even these couldn't flip behavior
 
-![Circuit Discovery - Temptation](mech_interp_outputs/patching/circuit_discovery_PT2_COREDe_to_PT3_COREDe_CC_temptation_v0.png)
+![Circuit Discovery - Temptation](../../mech_interp_outputs/patching/circuit_discovery_PT2_COREDe_to_PT3_COREDe_CC_temptation_v0.png)
 *Figure 3: Minimal circuit discovery for CC_temptation. Even 10 components couldn't flip behavior (red = in circuit, gray = other components).*
 
 #### Experiment 2: PT2 → PT3_Ut (Strategic → Utilitarian)
@@ -385,7 +391,7 @@ Mean |Δ| per scenario (De - Ut):
 
 **Answer**: Through subtle, distributed tuning across the same component set, creating different activation balances and context-dependent processing patterns.
 
-![Head Heatmaps - All Models](mech_interp_outputs/dla/dla_heads_CC_temptation.png)
+![Head Heatmaps - All Models](../../mech_interp_outputs/dla/dla_heads_CC_temptation.png)
 *Figure 4: Per-head contribution heatmaps for CC_temptation scenario. Models show nearly identical patterns with subtle variations that compound to create behavioral differences.*
 
 #### Ongoing: Attention Patterns and Component Interactions
@@ -697,28 +703,28 @@ Thank you for your pioneering work on moral alignment in LLMs. I look forward to
 
 ### A1. Logit Lens Trajectories
 
-![Logit Lens Grid](mech_interp_outputs/logit_lens/all_scenarios_grid.png)
+![Logit Lens Grid](../../mech_interp_outputs/logit_lens/all_scenarios_grid.png)
 *Figure A1: Layer-wise decision evolution across all scenarios. Models show similar progression patterns.*
 
 ### A2. Final Preference Heatmap
 
-![Final Preferences](mech_interp_outputs/logit_lens/final_preferences_heatmap.png)
+![Final Preferences](../../mech_interp_outputs/logit_lens/final_preferences_heatmap.png)
 *Figure A2: Final layer action preferences (Defect-Cooperate logit). All models prefer cooperation across scenarios.*
 
 ### A3. Head Attribution Comparison
 
-![DLA Heads - Continue](mech_interp_outputs/dla/dla_heads_CC_continue.png)
+![DLA Heads - Continue](../../mech_interp_outputs/dla/dla_heads_CC_continue.png)
 *Figure A3: Per-head attribution heatmaps for CC_continue scenario. Note similar patterns across models.*
 
 ### A4. Component Rankings by Model
 
 **Strategic (PT2)**:
-![PT2 Top Components](mech_interp_outputs/dla/dla_top_components_PT2_COREDe.png)
+![PT2 Top Components](../../mech_interp_outputs/dla/dla_top_components_PT2_COREDe.png)
 
 **Deontological (PT3_De)**:
-![PT3_De Top Components](mech_interp_outputs/dla/dla_top_components_PT3_COREDe.png)
+![PT3_De Top Components](../../mech_interp_outputs/dla/dla_top_components_PT3_COREDe.png)
 
 **Utilitarian (PT3_Ut)**:
-![PT3_Ut Top Components](mech_interp_outputs/dla/dla_top_components_PT3_COREUt.png)
+![PT3_Ut Top Components](../../mech_interp_outputs/dla/dla_top_components_PT3_COREUt.png)
 
 *Figure A4: Top-20 components for each model. L8/L9 MLPs dominate all models.*

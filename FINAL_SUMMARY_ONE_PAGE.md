@@ -10,11 +10,11 @@ Preliminary data suggests the primary mechanism may be **network rewiring**. The
 
 Claude helped with a lot of the implementation work.
 
-*   **Phase 1 (Setup)**: Replicated the training pipeline for the 4 main model variations (Game Payoffs, Deontological, Utilitarian, Hybrid) and generated 15 prompts across 5 standard scenarios to establish a baseline.
-*   **Phase 2 (Initial DLA Analysis)**: Ran Direct Logit Attribution to look for suppressed "selfish" neurons. The analysis highlighted L8/L9 MLPs as potential "cooperation components" present in all models, including the base model.
-*   **Phase 3 (Suppression Check)**: Investigated whether "selfish" components were being suppressed. The data suggested these components might remain as active in moral models as in strategic ones, but their influence appears outweighed or rerouted.
-*   **Phase 4 (Model Comparison)**: Comparison of Deontological and Utilitarian models showed them to be 99.9999% similar by cosine distance. Consistency across multiple metrics suggests this was not a measurement error.
-*   **Phase 5 (Interaction Analysis)**: Bidirectional patching suggested that while components are identical, ~78% might respond differently to context swaps. Subsequent wiring analysis identified specific pathways (such as L2→L9) that appeared to reverse polarity.
+*   **Phase 1**: Set up training pipeline for 4 model variations and generated baseline prompts.
+*   **Phase 2**: Ran Direct Logit Attribution looking for suppressed "selfish" neurons.
+*   **Phase 3**: Pivoted to check whether suppression or rerouting explains the behavior.
+*   **Phase 4**: Compared Deontological vs. Utilitarian model weights.
+*   **Phase 5**: Ran bidirectional patching and wiring analysis.
 
 ## Key Findings
 
@@ -23,7 +23,7 @@ I analyzed the models across four levels. Note that these metrics are derived fr
 1.  **Components**: The models appear effectively identical in terms of weights (99.9999% similarity). Fine-tuning did not seem to significantly alter individual component weights.
 2.  **Attention**: Attention patterns measured as nearly indistinguishable (99.99% similarity). Both Deontological and Utilitarian models appeared to attend to the same input information.
 3.  **Behaviors**: Despite the structural similarity, the behavioral outputs differ. I couldn't find any direct coding flips, but the outputs were consistently asymmetric.
-4.  **Interactions**: This appears to be a key differentiator. Component correlations showed limited overlap (~20%) between models, suggesting the connections (wiring) between components may have shifted.
+4.  **Interactions**: Component correlations showed limited overlap (~20%) between models, suggesting the connections between components shifted.
 
 ### Specific Mechanism Example
 
@@ -36,7 +36,7 @@ A potential shift was observed in `L2_MLP`, which may function as a routing node
 *   **RQ1**: How are "selfish" attention heads suppressed during moral fine-tuning?
 	* I couldn't find much evidence that "selfish" heads are supressed. Instead, they appear to remain active but may be bypassed or routed differently.
 *   **RQ2**: Do Deontological vs. Utilitarian agents develop distinct circuit structures?
-	* The models seem to possess distinct structures, but these differences appear to lie in the wiring (specifically ~29 changed pathways) rather than the nodes themselves.
+	* Yes, but the differences lie in ~29 changed inter-component pathways rather than the components themselves.
 *   **RQ3**: Can we identify which parts of the model to fine-tune specifically for more targeted training?
 	* It may be feasible to fine-tune specific pathways (e.g., L2→L9 or the L6 hub) rather than entire layers, though this requires further validation.
 
@@ -52,5 +52,4 @@ These observations could suggest a shift in how we interpret model differences:
 ## Next Steps / In Progress
 
 *   **L2_MLP Investigation**: Analyzing `L2_MLP` to understand its potential role as a router in divergent pathways.
-*   **Attention Analysis**: Documenting the finding that Deontological and Utilitarian models possess nearly identical attention patterns (diff < 10^-5), which would indicate that differences arise from processing rather than attention.
 *   **Single-Component Fine-Tuning**: Planning to test the wiring hypothesis by fine-tuning only the `L2_MLP` component in the Base model to see if this single modification can induce the target behavior.
