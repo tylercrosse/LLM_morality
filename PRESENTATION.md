@@ -24,7 +24,7 @@
     - Strategic: 99.96% defection
     - Deontological: 99.97% cooperation
     - Utilitarian: 92.7% cooperation
-- **Impact**: Numbers changed, but core mechanistic discoveries (L8/L9, L2_MLP routing, 29 pathways) confirmed.
+- **Impact**: Numbers changed and interaction findings shifted: the rewiring effect is broader and distributed (not dominated by an L2_MLP switch).
 - **Takeaway**: Always validate internal metrics against actual behavior.
 
 ## Slide 3 - RL Fine-Tuning (Methodology)
@@ -90,7 +90,7 @@
 - Also used bidirectional patching to test De<->Ut asymmetry.
 
 ## Slide 10 - Activation Patching (Results)
-- PT2 -> PT3_De and PT2 -> PT3_Ut produced **zero behavioral flips** across all experiments (validated under corrected sequence metrics).
+- Patching Strategic -> Deontological and Strategic -> Utilitarian **zero behavioral flips** across all experiments.
 - Effects were generally small and distributed, with no single decisive "moral switch."
 - Layer-wise sensitivity analysis reveals mid-to-late layers (L15-L25) show strongest perturbation effects, though insufficient to flip decisions.
 - Pattern aligns with logit lens findings: decision stabilization in L20-24 corresponds to high patching sensitivity.
@@ -143,11 +143,13 @@
 
 ## Slide 16 - Component Interaction Analysis (Results)
 - Major finding: interaction-level divergence is strong despite near-identical components and attention.
-- Identified 29 significantly different pathways; several of the largest involve `L2_MLP`.
-- `L2_MLP` behaves like a routing switch with opposite coupling patterns in De vs Ut.
-  - L2_MLP → L9_MLP correlation difference: **0.76** (largest pathway difference)
-- Interaction-gap magnitude aligns with patching asymmetry (`r = 0.67`), supporting mechanistic relevance.
-- **Validation**: 29 pathways and L2_MLP routing confirmed under corrected sequence metrics.
+- Identified **541 significantly different pathways** (`|Delta corr| > 0.3`, 40.8% of 1,326 pairs).
+- Difference magnitudes are substantial and widespread:
+  - `|Delta corr| > 0.5`: 251 pathways
+  - `|Delta corr| > 0.7`: 94 pathways
+- Top-difference pathways are now centered more on distributed hubs (e.g., `L19_ATTN`, `L1_MLP`, `L17_MLP`) than a single early-layer switch.
+- `L2_MLP -> L9_MLP` is no longer a top driver in the refreshed interaction table (`|Delta| = 0.164`, rank ~858/1326).
+- **Weight analysis**: models remain 99%+ similar in adapter weight space, consistent with connectivity-level changes over massive retraining.
 - Figures:
   - ![](mech_interp_outputs/component_interactions/interaction_diff_Deontological_vs_Utilitarian.png)
   - ![](mech_interp_outputs/component_interactions/additional_viz/viz1_network_graph.png)
@@ -157,7 +159,7 @@
 - Mechanistic synthesis:
   - component level: highly similar (99.9999%)
   - attention level: highly similar (99.99%)
-  - interaction level: meaningfully different (29 pathways)
+  - interaction level: meaningfully different (541 pathways with `|Delta corr| > 0.3`)
   - Figure:
     - ![](mech_interp_outputs/synthesis/similarity_cascade.png)
 - **Validation**: All findings validated (Feb 4, 2026) with corrected sequence-level decision metric.

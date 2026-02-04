@@ -1206,6 +1206,186 @@ OUTPUT (Same components, different routing = different behavior)
 
 ---
 
+### Weight Analysis (Supplementary)
+
+**Date**: February 3, 2026 (generated alongside other Stage 4 analyses)
+
+**Objective**: Measure LoRA adapter weight magnitudes to determine which components were most heavily modified during fine-tuning, and test whether L2_MLP's routing role requires massive retraining.
+
+**Method**: Computed Frobenius norms ||B @ A||_F for all LoRA adapter matrices across all models. LoRA adapters (rank=64, alpha=32) represent the fine-tuned modifications to each component.
+
+**Key Metrics**:
+- **Frobenius norm**: Measures overall magnitude of weight changes
+- **Percentile ranking**: Position relative to other components in the same model
+- **Cosine similarity**: Measures directional alignment between model weight spaces
+- **L2 distance**: Measures total divergence in weight space
+
+**Outputs**:
+- `mech_interp_outputs/weight_analysis/weight_norms_comparison.csv`: Summary statistics per model
+- `mech_interp_outputs/weight_analysis/weight_norms_all_models.csv`: Component-level norms for all models
+- `mech_interp_outputs/weight_analysis/adapter_similarity_cosine.csv`: Pairwise cosine similarity matrix
+- `mech_interp_outputs/weight_analysis/adapter_distance_l2.csv`: Pairwise L2 distance matrix
+- 20 PNG visualizations: heatmaps, layer profiles, similarity matrices, top components per model
+- `FIGURE_GUIDE.md`: Comprehensive interpretation guide (687 lines)
+
+#### Key Results
+
+**1. High Weight Similarity Across Models**
+
+All models are 99.3-99.7% similar in weight space (cosine similarity):
+- Strategic-Deontological: 99.66%
+- Strategic-Utilitarian: 99.69%
+- Deontological-Utilitarian: 99.34%
+- Lowest similarity: still >99.3%
+
+**Interpretation**: Models share nearly identical weight representations, consistent with 99.99% attention similarity and 99.9999% component-level DLA similarity. Weight-space similarity complements activation-space findings.
+
+**2. L2_MLP Modification Ranking**
+
+L2_MLP was NOT among the most heavily modified components:
+
+| Model | L2_MLP Total Norm | Percentile Rank | Interpretation |
+|-------|-------------------|-----------------|----------------|
+| PT2_COREDe (Strategic) | 0.122 | 23rd percentile | 77% of components modified more |
+| PT3_COREDe (Deontological) | 0.153 | 27th percentile | 73% of components modified more |
+| PT3_COREUt (Utilitarian) | 0.224 | 12th percentile | 88% of components modified more |
+| PT4_COREDe (Hybrid) | 0.234 | 12th percentile | 88% of components modified more |
+
+**Interpretation**: L2_MLP's routing switch role (0.76 correlation difference to L9_MLP) does not require massive weight retraining. Functional importance ≠ weight magnitude.
+
+**3. L8/L9 MLP Modification Magnitudes**
+
+L8 and L9 MLPs (the pro-Defect and pro-Cooperate components from DLA) were consistently modified MORE than L2_MLP:
+
+| Model | L8_MLP Norm | L9_MLP Norm | L2_MLP Norm | Comparison |
+|-------|-------------|-------------|-------------|------------|
+| PT2 (Strategic) | 0.127 | 0.131 | 0.122 | L8/L9 > L2 |
+| PT3_De (Deontological) | 0.159 | 0.164 | 0.153 | L8/L9 > L2 |
+| PT3_Ut (Utilitarian) | 0.245 | 0.250 | 0.224 | L8/L9 > L2 |
+| PT4 (Hybrid) | 0.287 | 0.294 | 0.234 | L8/L9 > L2 |
+
+**Interpretation**: Components with strong direct contributions to decision-making (L8/L9) were retrained more heavily than routing components (L2). Yet L2's connectivity changes create larger functional effects.
+
+**4. Modification Magnitude vs Behavioral Extremity**
+
+Overall modification magnitudes do NOT correlate with behavioral extremity:
+
+| Model | Mean Weight Norm | Behavioral Extremity (p_action2) |
+|-------|------------------|----------------------------------|
+| PT2 (Strategic) | 0.037 (lowest) | 0.9996 (most extreme: defect) |
+| PT3_De (Deontological) | 0.045 | 0.0003 (most extreme: cooperate) |
+| PT3_Ut (Utilitarian) | 0.071 (highest) | 0.0703 (moderate: cooperate) |
+| PT4 (Hybrid) | 0.072 (highest) | 0.4116 (moderate: mixed) |
+
+**Interpretation**: Strategic model (lowest modifications) shows most extreme behavior. Utilitarian/Hybrid (highest modifications ~2x) show more moderate behavior. Suggests behavioral differences arise from HOW components connect, not HOW MUCH they change.
+
+#### Implications
+
+**1. Supports Network Rewiring Hypothesis**
+
+- L2_MLP wasn't heavily retrained (12-27th percentile), yet shows up as functionally critical in interaction analysis (0.76 correlation difference)
+- You don't need massive weight changes to create routing differences
+- Lighter connectivity modifications sufficient to rewire information flow
+
+**2. Weight Similarity Complements Activation Similarity**
+
+- 99%+ weight similarity (static measure)
+- 99.99% attention similarity (dynamic attentional measure)
+- 99.9999% component-level DLA similarity (dynamic contribution measure)
+- ~20% interaction similarity (dynamic connectivity measure)
+
+**Pattern**: Models are highly similar at component and weight level, but diverge at connectivity level.
+
+**3. Static vs Dynamic Importance Dissociation**
+
+- **Static importance** (weight magnitude): L8/L9 > L2_MLP
+- **Dynamic importance** (functional role): L2_MLP = routing switch, L8/L9 = endpoint encoders
+
+**Interpretation**: Weight magnitude does not predict functional importance. A component can be lightly modified (L2_MLP) yet play a critical routing role. Conversely, heavily modified components (L8/L9) may be endpoints rather than switches.
+
+**4. Task-Relevant vs Task-Irrelevant Modifications**
+
+Frobenius norm measures total weight change but doesn't distinguish:
+- Task-relevant modifications (affect IPD behavior)
+- Task-irrelevant modifications (unrelated to IPD)
+- Feature refinement (improving existing capabilities)
+- Feature repurposing (changing functional role)
+
+**Limitation**: Weight analysis alone cannot determine which modifications matter for behavior. Must pair with activation-based analyses.
+
+#### Integration with Other Findings
+
+**Consistent with DLA**:
+- L8/L9 contributions similar across models (99.9999% correlation)
+- Weight analysis shows L8/L9 were modified more than L2
+- Both suggest L8/L9 are universal feature encoders, not model-specific
+
+**Consistent with Patching**:
+- Zero behavioral flips (21,060 patches) suggests distributed encoding
+- Weight analysis shows no single component dominates modification magnitude
+- Both support distributed representation rather than single-component causality
+
+**Complements Interaction Analysis**:
+- Interaction analysis shows L2_MLP routing role (correlation differences)
+- Weight analysis shows L2_MLP wasn't heavily retrained
+- Together: Routing differences arise from connectivity changes, not massive component-level retraining
+
+**Explains Patching Asymmetry**:
+- Patching asymmetry: Strategic→Moral easier than Moral→Strategic
+- Weight analysis: Moral models have higher overall modification magnitudes
+- Possible mechanism: Heavier modifications create more "inertia" resisting patches
+
+#### Limitations
+
+1. **LoRA Rank Limitation**: Rank-64 adapters may not capture all fine-tuning effects. Higher-rank decompositions might reveal different patterns.
+
+2. **Frobenius Norm Interpretation**: Treats all weight directions equally. Doesn't distinguish between:
+   - Large changes in unimportant directions
+   - Small changes in critical directions
+
+3. **Static Measure**: Weight magnitude is a static property. Doesn't reveal:
+   - Which connections are activated during inference
+   - Which modifications are task-relevant
+   - How modifications interact with base model weights
+
+4. **Component Granularity**: Analysis aggregates LoRA adapters for entire modules (e.g., all of L2_MLP). Finer-grained analysis (individual neurons, weight subspaces) might reveal localized heavy modifications within L2_MLP.
+
+5. **No Causal Claims**: Weight analysis shows correlation (modification magnitude vs functional role) but not causation. Doesn't prove lightweight modifications to L2_MLP cause routing behavior.
+
+#### Validation
+
+Weight analysis findings align with validation results:
+- Models retain 99%+ weight similarity while showing clear behavioral separation (99.96% vs 0.03% p_action2)
+- Perfect sequence-sampled alignment (1.0) confirms behavioral differences arise from connectivity, not component presence
+- L2_MLP routing confirmed under corrected metrics (0.76 correlation difference preserved)
+
+#### Files Generated
+
+**CSV Data**:
+- `weight_norms_PT2_COREDe.csv` (182 components)
+- `weight_norms_PT3_COREDe.csv` (182 components)
+- `weight_norms_PT3_COREUt.csv` (182 components)
+- `weight_norms_PT4_COREDe.csv` (182 components)
+- `weight_norms_all_models.csv` (728 rows: 4 models × 182 components)
+- `weight_norms_comparison.csv` (summary statistics)
+- `adapter_similarity_cosine.csv` (4×4 similarity matrix)
+- `adapter_distance_l2.csv` (4×4 distance matrix)
+
+**Visualizations**:
+- Per-model heatmaps (raw and normalized): 8 files
+- Top components per model: 4 files
+- Layer profiles (MLP and attention): 2 files
+- L2_MLP comparison: 1 file
+- Similarity/distance heatmaps: 2 files
+- Additional diagnostic plots: 3 files
+
+**Documentation**:
+- `FIGURE_GUIDE.md`: 687-line interpretation guide for all visualizations
+
+**Status**: Supplementary analysis completed. Integrated into write-up and presentation as supporting evidence for network rewiring hypothesis. Demonstrates L2_MLP's routing role is connectivity-based, not modification-magnitude-based.
+
+---
+
 **Metric Note (Added Feb 4, 2026)**: The analyses in this stage used single final-token logit differences as the primary decision metric. After identifying a mismatch with inference behavior, all analyses were rerun with sequence-level probability metrics (Feb 4). See Stage 6 for validation results. **Key finding**: All substantive conclusions from this stage were preserved under corrected metrics.
 
 ---

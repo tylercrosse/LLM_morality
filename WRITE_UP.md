@@ -39,11 +39,11 @@ The mismatch meant my internal measurements could make models look more similar 
 
 **The fix**: I went back and updated all the analyses to use the actual sequence probabilities—literally measuring "what's the probability the model generates 'action1' vs 'action2'" the same way inference does. Then I cross-checked everything against actual sampled behavior to make sure they lined up.
 
-**Did this change the findings?** Not really! The numbers look different (probabilities instead of logit differences), but the core discoveries held up:
+**Did this change the findings?** Partly. The high-level story still holds (models differ mainly in coordination/routing, not raw component identity), but some interaction-level specifics changed after reruns:
 - Perfect agreement between the metric and actual sampling (100% alignment)
 - Models are still clearly separated (strategic model defects 99.96% of the time, moral models cooperate >92%)
-- The L2_MLP "routing switch" finding: still there
-- The 29 pathway differences: still there
+- The old "single L2_MLP routing switch" framing is not strongly supported in the refreshed rankings
+- Pathway differences are much more widespread than the earlier 29-pathway estimate
 - Network rewiring hypothesis: still holds
 
 So the story I'm telling in this post is robust—I just had to make sure I was measuring the right thing. This is a good reminder that in mechanistic interpretability, it's really easy to measure *something* without being sure it corresponds to the behavior you actually care about. Always validate against the real outputs.
@@ -376,43 +376,30 @@ The analysis:
 
 #### Results + Reflection
 
-![Correlation difference heatmap](mech_interp_outputs/component_interactions/correlation_difference_heatmap.png)
+![Correlation difference heatmap](mech_interp_outputs/component_interactions/interaction_diff_Deontological_vs_Utilitarian.png)
 
-*Figure 6: Correlation differences between Deontological and Utilitarian models (52×52 matrix). Hot spots show pathways that are "wired" differently. Notice L2_MLP's row and column have many hot spots - it appears in 7 of the top 10 differences.*
+*Figure 6: Correlation differences between Deontological and Utilitarian models (52×52 matrix). Hot spots show pathways that are "wired" differently, with substantial differences spread across many layer pairs rather than concentrated in a single component.*
 
 **The Discovery: Network Rewiring**
 
-While components were 99.9999% similar and attention was 99.99% similar, **component interactions were only ~20% similar.**
+While components were 99.9999% similar and attention was 99.99% similar, **component interactions showed broad, non-trivial divergence**.
 
 I found:
-- **29 pathways significantly different** (correlation difference > 0.3)
-- **10 pathways strongly different** (difference > 0.5)
-- **3 pathways extremely different** (difference > 0.7)
+- **541 pathways significantly different** (`|difference| > 0.3`, 40.8% of all 1,326 pairs)
+- **251 pathways strongly different** (`|difference| > 0.5`)
+- **94 pathways very strongly different** (`|difference| > 0.7`)
 
 This explained the paradox. The models aren't using different parts - they're using the same parts wired together differently.
 
-**The L2_MLP "Routing Switch"**
+**From "single switch" to distributed rewiring**
 
-One component kept appearing in the different pathways: **L2_MLP**, an MLP layer early in the network (layer 2 out of 26).
+An earlier pass suggested an L2_MLP-centered routing switch. In the refreshed interaction tables, that specific claim weakened substantially:
 
-L2_MLP appeared in **7 of the top 10 pathway differences**. Here's the most striking example:
+- `L2_MLP <-> L9_MLP` now has `|difference| = 0.164` (rank ~858/1326), not a top pathway.
+- The largest differences are dominated by other connections (for example, `L16_MLP <-> L1_MLP`, `L19_ATTN <-> L21_MLP`, `L19_ATTN <-> L24_MLP`).
+- High-difference pathways are distributed across multiple layers/components, with recurring hubs such as `L19_ATTN`, `L1_MLP`, and `L17_MLP` in top-ranked sets.
 
-**L2_MLP → L9_MLP connection:**
-- Deontological: +0.272 (positive correlation - they activate together)
-- Utilitarian: -0.490 (negative correlation - when one activates, the other doesn't)
-- Difference: **0.762**
-
-Remember that L9_MLP is the strong pro-Cooperate component I found in the DLA analysis.
-
-So what's happening:
-- **In Deontological models**: L2_MLP routes information *toward* the cooperation component (L9_MLP)
-- **In Utilitarian models**: L2_MLP routes information *away from* the cooperation component
-
-Same component (L2_MLP), opposite functional role. It acts like a routing switch that sends information down different paths depending on the moral framework.
-
-**The L6_MLP "Integration Hub"**
-
-Another component, L6_MLP, appeared in 14 of the top 20 key pathways. It seems to act as an integration hub - a central node that receives inputs from many other components. But it receives them differently in Deontological vs Utilitarian models.
+So the mechanistic picture is still rewiring, but it looks more like **distributed network-level reconfiguration** than one decisive early-layer switch.
 
 **Validation**
 
@@ -432,7 +419,28 @@ Same Lego bricks, different structure. Same components, different wiring diagram
 
 That said, as far as I can tell, this is one of the first demonstrations of this kind of "network rewiring" mechanism in the interpretability literature. Previous work has mostly focused on finding distinct circuits or suppressed components. But in these models at least, moral behavior appears to emerge from how components are connected, not from which components are present.
 
-*Note: I validated these findings after fixing my measurement approach: still 29 pathways with big differences, still a 0.76 correlation gap for L2_MLP → L9_MLP. The rewiring story holds up.*
+#### A Quick Check: Was L2_MLP Heavily Retrained?
+
+Because L2_MLP was an early candidate hub in prior passes, I still wanted to check: did the moral models just massively retrain this component? That would be a simpler explanation than "network rewiring."
+
+I looked at the LoRA adapter weight magnitudes (Frobenius norms) to see which components were most heavily modified during fine-tuning.
+
+![L2_MLP Comparison](mech_interp_outputs/weight_analysis/l2_mlp_comparison.png)
+
+**The answer: No.** L2_MLP wasn't particularly heavily modified:
+- It ranks in the 11-27th percentile for modification magnitude
+- That means 73-88% of components were modified MORE than L2_MLP
+- L8 and L9 MLPs (the components that encode cooperation/defection) were actually modified more than L2
+
+![Model Weight Similarity](mech_interp_outputs/weight_analysis/adapter_similarity_heatmap.png)
+
+All models are also 99%+ similar in weight space, which matches the 99.99% attention similarity I found earlier.
+
+**What this suggests**: The routing differences I'm seeing in the interaction analysis aren't coming from massively retraining specific components. Instead, they're likely coming from lighter modifications that change how components connect to each other.
+
+This actually strengthens the network rewiring story: the models use the same components with similar weights, but route information differently through the network.
+
+*Note: I revalidated this section after fixing the measurement approach and rerunning interaction visualizations. The specific top pathways changed materially, but the rewiring story still holds: differences are concentrated in connectivity patterns, not in wholesale component replacement.*
 
 ---
 
@@ -464,7 +472,7 @@ Before wrapping up, I want to be clear about what I'm confident in and what I'm 
 **What I'm confident about**:
 - The models genuinely behave differently (99.96% defection vs 99.97% cooperation—that's not noise)
 - Internal measurements align with actual behavior (100% agreement in validation)
-- The major patterns are real: L8/L9 MLPs doing opposite things, L2_MLP showing up in pathway differences, 99.99% attention similarity
+- The major patterns are real: L8/L9 MLPs doing opposite things, broad interaction-level rewiring, and 99.99% attention similarity
 - Statistical significance is strong (p < 0.00005 for model separation)
 
 **What I'm less sure about**:

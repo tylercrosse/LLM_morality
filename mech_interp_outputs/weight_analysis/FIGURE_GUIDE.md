@@ -280,6 +280,50 @@ The **Frobenius norm** `||B @ A||_F` quantifies the magnitude of weight change:
 
 ## Adapter Comparison Visualizations
 
+### Manuscript-Ready Narrative (Integrated)
+
+Use these paragraphs directly in `WRITE_UP.md` or slides. They complement the bullet-point guidance below with a more narrative explanation of data collection, plotted quantities, and interpretation focus.
+
+#### `adapter_similarity_heatmap.png` (Cosine Similarity)
+
+This figure is constructed from the component-level LoRA weight analysis: for each adapter, we compute `||B @ A||_F` for all 182 targeted modules (26 layers × 7 module types), then treat those 182 values as a single adapter fingerprint. Pairwise cosine similarity is then computed between fingerprints to quantify whether adapters emphasize the same components in similar proportions.
+
+The heatmap therefore represents *pattern similarity* rather than absolute strength. High values indicate two adapters concentrate modifications in comparable places in the network, even if one adapter is globally stronger. In practice, this helps answer whether different moral training regimes preserve a common architectural strategy.
+
+When reading the plot, focus on pairwise ranking rather than tiny absolute deltas: identify the closest pair (most shared update pattern), the most distinct pair (largest pattern divergence), and whether moral variants cluster apart from the strategic baseline.
+
+#### `adapter_distance_heatmap.png` (L2 Distance)
+
+This figure uses the same 182-dimensional adapter fingerprints but compares them with Euclidean (L2) distance. Unlike cosine similarity, L2 directly reflects magnitude differences in addition to component-wise shape differences, so it captures how far apart adapters are in total update space.
+
+The plotted values represent raw geometric separation between adapters’ norm vectors. A small distance implies similar absolute update levels across components; a large distance implies broader quantitative divergence, often driven by stronger late-layer MLP updates.
+
+What to look for is whether adapters separate primarily by training objective or by update strength. In our run, Strategic/Deontological are close and Utilitarian/Hybrid are close, while Strategic–Hybrid is farthest, consistent with a weaker-vs-stronger adaptation split.
+
+#### `adapter_top_variable_components_heatmap.png` (Top Divergent Components)
+
+For this figure, components are ranked by cross-adapter standard deviation in Frobenius norm, and the top 30 most variable components are selected. Each component row is then z-scored across adapters so the plot highlights *relative* over- and under-expression by adapter, not just raw scale.
+
+The heatmap represents where adapter differences are concentrated at component granularity. In this analysis, the dominant variable features are late-layer MLP gate/up modules (especially around L22–L24), indicating that adapter divergence is localized to the same late MLP region implicated in behavior-level differences.
+
+When interpreting, look for coherent blocks (e.g., one adapter consistently above average across adjacent late-layer components). Those blocks are stronger evidence of structured specialization than isolated single-cell outliers.
+
+#### `adapter_layerwise_mlp_delta_vs_strategic.png` (Layerwise Delta)
+
+This plot is computed by aggregating MLP module norms (`gate + up + down`) per layer for each adapter and subtracting the Strategic profile layer-by-layer. Strategic is the zero baseline; each curve shows where another adapter is stronger or weaker than that baseline.
+
+The figure represents depth-localized divergence in MLP rewriting intensity. Positive regions indicate additional MLP adaptation beyond strategic training at those layers, while near-zero regions indicate shared modification levels.
+
+Read this plot as a localization tool: find where curves separate most strongly (typically late layers), where they reconverge, and whether different moral objectives diverge at the same depth or at distinct layer bands.
+
+#### `adapter_mlp_vs_attn_summary.png` (Subsystem Summary)
+
+This summary is derived from the same component table, but aggregated into two subsystem means per adapter: mean norm over all MLP modules and mean norm over all attention modules. It compresses the 182-module analysis into a quick “where did training budget go?” view.
+
+The grouped bars represent relative update allocation to computation-heavy MLP pathways versus routing-heavy attention pathways. Across adapters in this run, MLP means are consistently larger than attention means, indicating fine-tuning predominantly altered transformation circuits rather than attention routing.
+
+What to look for is both within-adapter gap (MLP minus attention) and across-adapter rank ordering. Together, those patterns indicate whether stronger adapters simply scale both subsystems or disproportionately amplify MLP modifications.
+
 ### 7. `adapter_similarity_heatmap.png`
 
 **Data Collected:**
