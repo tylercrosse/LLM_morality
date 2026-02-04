@@ -328,7 +328,9 @@ class AttentionComparator:
         fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
         # Aggregate by scenario
-        scenario_stats = comparison_df.groupby('scenario').mean()
+        # Restrict aggregation to numeric columns; comparison_df includes
+        # string labels such as seq preference names.
+        scenario_stats = comparison_df.groupby('scenario').mean(numeric_only=True)
 
         token_types = ['action', 'opponent', 'payoff']
         titles = [
