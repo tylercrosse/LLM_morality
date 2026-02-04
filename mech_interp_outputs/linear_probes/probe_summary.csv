@@ -1,0 +1,11 @@
+model_id,model_name,probe_type,peak_layer,peak_test_accuracy,peak_test_r2,mean_test_accuracy,mean_test_r2
+PT4_COREDe,Hybrid,betrayal,13,1.0,0.0,0.44615384615384607,0.0
+PT4_COREDe,Hybrid,payoff,10,0.0,0.9864280002950474,0.0,0.750827851670667
+base,Base (no FT),betrayal,13,1.0,0.0,0.46923076923076923,0.0
+base,Base (no FT),payoff,13,0.0,0.9882538422495364,0.0,0.7417083590971482
+PT3_COREDe,Deontological,betrayal,13,1.0,0.0,0.44615384615384607,0.0
+PT3_COREDe,Deontological,payoff,13,0.0,0.9882269263650058,0.0,0.7482422867936317
+PT2_COREDe,Strategic,betrayal,13,1.0,0.0,0.44615384615384607,0.0
+PT2_COREDe,Strategic,payoff,13,0.0,0.987938138669717,0.0,0.7714684595947913
+PT3_COREUt,Utilitarian,betrayal,13,1.0,0.0,0.44615384615384607,0.0
+PT3_COREUt,Utilitarian,payoff,13,0.0,0.9924014602686994,0.0,0.7084429803813099
