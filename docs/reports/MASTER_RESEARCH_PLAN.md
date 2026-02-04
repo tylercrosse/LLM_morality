@@ -8,6 +8,18 @@ This document outlines the consolidated strategy for the remainder of the projec
 
 ---
 
+## Important Methodology Note
+
+Before running new mech-interp experiments, review:
+
+- `docs/reports/LOGIT_DECISION_METRIC_LESSONS.md`
+
+This captures the sequence-vs-single-token logit mistake, the metric
+standardization changes, and the pre-flight checklist to avoid repeating
+the same issue in future analyses.
+
+---
+
 ## Phase 1: Foundation (Completed)
 
 *   **Task 0: Merge LoRA Adapters** (✅ Done)

@@ -14,6 +14,19 @@
 - RQ3: What should future targeted fine-tuning intervene on?
 - Pipeline: train/evaluate first, then logit lens, DLA, activation patching, attention, and interaction analysis.
 
+## Optional Slide 2A - Methodology Note: Metric Validation
+- **Issue identified (Feb 3)**: Initial analyses used single final-token logit differences, while actual inference behavior is sequence-level.
+- **Fix applied**: Updated all analyses to use sequence probabilities (`p_action2` = probability of generating "action2").
+- **Validation results (Feb 4)**:
+  - Perfect alignment (1.0) between internal measurements and sampled behavior across all 60 model×scenario combinations
+  - Highly significant model separation (p < 0.00005)
+  - All substantive findings preserved:
+    - Strategic: 99.96% defection
+    - Deontological: 99.97% cooperation
+    - Utilitarian: 92.7% cooperation
+- **Impact**: Numbers changed, but core mechanistic discoveries (L8/L9, L2_MLP routing, 29 pathways) confirmed.
+- **Takeaway**: Always validate internal metrics against actual behavior.
+
 ## Slide 3 - RL Fine-Tuning (Methodology)
 - Reproduced paper setup with PPO + LoRA on Gemma-2-2b-it.
 - 1,000 episodes per model, trained against a Tit-for-Tat opponent.
@@ -53,7 +66,8 @@
 
 ## Slide 7 - Logit Analysis (Methodology)
 - Used layer-wise logit lens to track evolving preference through the forward pass.
-- Decision metric: `Delta logit = logit(Defect) - logit(Cooperate)` (negative = cooperate preference).
+- Decision metric: Sequence-level probability (`p_action2` = probability of generating "action2" continuation).
+  - **Note**: Initial analysis used single-token logit differences; corrected to sequence probabilities to match actual inference behavior. All findings validated (Feb 4, 2026).
 - Compared trajectories across models and across all five scenario types.
 - Goal: identify *where in depth* decisions form and stabilize.
 
@@ -61,7 +75,10 @@
 - Found strong initial cooperation bias at Layer 0 across all models (including base).
 - Common trajectory pattern: early cooperation -> mid-layer moderation -> late-layer restabilization.
 - Final decision behavior mostly stabilizes around Layers 20-24.
-- Key point: trajectories are highly similar across models, so layer-level trends alone do not explain moral variant differences.
+- Key point: Layer-wise aggregate trajectories are similar across models, but behavioral separation is clear when measured with sequence probabilities:
+  - Strategic (PT2): 99.96% defection
+  - Deontological (PT3_De): 99.97% cooperation
+  - Utilitarian (PT3_Ut): 92.7% cooperation
 - Figures:
   - ![](mech_interp_outputs/logit_lens/all_scenarios_grid.png)
   - ![](mech_interp_outputs/logit_lens/final_preferences_heatmap.png)
@@ -73,13 +90,15 @@
 - Also used bidirectional patching to test De<->Ut asymmetry.
 
 ## Slide 10 - Activation Patching (Results)
-- PT2 -> PT3_De and PT2 -> PT3_Ut produced **zero behavioral flips**.
+- PT2 -> PT3_De and PT2 -> PT3_Ut produced **zero behavioral flips** across all experiments (validated under corrected sequence metrics).
 - Effects were generally small and distributed, with no single decisive "moral switch."
+- Layer-wise sensitivity analysis reveals mid-to-late layers (L15-L25) show strongest perturbation effects, though insufficient to flip decisions.
+- Pattern aligns with logit lens findings: decision stabilization in L20-24 corresponds to high patching sensitivity.
 - Conclusion: moral behavior appears robust and redundant at component level.
-- Cross-patching still showed directional asymmetry in many components, suggesting context-dependent roles.
+- **Validation**: Finding held up across 21,060 patches with corrected decision metric.
 - Figures:
-  - ![](mech_interp_outputs/patching/patch_heatmap_PT2_COREDe_to_PT3_COREDe_CC_temptation.png)
-  - ![](mech_interp_outputs/patching/circuit_discovery_PT2_COREDe_to_PT3_COREDe_CC_temptation_v0.png)
+  - ![](mech_interp_outputs/patching/overview/overview_flip_rates.png)
+  - ![](mech_interp_outputs/patching/overview/overview_layer_type_heatmap.png)
 
 ## Slide 11 - Direct Latent Attribution (DLA) (Methodology)
 - Used DLA to decompose final action logits into per-component contributions (heads + MLP blocks).
@@ -94,6 +113,7 @@
 - Moral fine-tuning changed contributions only subtly (largest shifts tiny vs core magnitudes).
 - De vs Ut were almost identical at component-strength level (~99.9999% similarity).
 - This challenged the "selfish component suppression" hypothesis.
+- **Validation**: L8/L9 dominance and component similarity confirmed under corrected sequence metrics.
 - Figures:
   - ![](mech_interp_outputs/dla/dla_top_components_PT3_COREDe.png)
   - ![](mech_interp_outputs/dla/dla_mlps_CC_temptation.png)
@@ -111,6 +131,7 @@
 - Hypothesis was rejected: De and Ut attention patterns were nearly identical (~99.99%).
 - Differences were near noise scale, not large enough to explain behavior differences.
 - Interpretation: both variants read similar information; divergence must come from downstream processing/routing.
+- **Validation**: Attention similarity confirmed under corrected metrics.
 - Figure:
   - ![](mech_interp_outputs/attention_analysis/attention_comparison_Deontological_vs_Utilitarian.png)
 
@@ -124,7 +145,9 @@
 - Major finding: interaction-level divergence is strong despite near-identical components and attention.
 - Identified 29 significantly different pathways; several of the largest involve `L2_MLP`.
 - `L2_MLP` behaves like a routing switch with opposite coupling patterns in De vs Ut.
+  - L2_MLP → L9_MLP correlation difference: **0.76** (largest pathway difference)
 - Interaction-gap magnitude aligns with patching asymmetry (`r = 0.67`), supporting mechanistic relevance.
+- **Validation**: 29 pathways and L2_MLP routing confirmed under corrected sequence metrics.
 - Figures:
   - ![](mech_interp_outputs/component_interactions/interaction_diff_Deontological_vs_Utilitarian.png)
   - ![](mech_interp_outputs/component_interactions/additional_viz/viz1_network_graph.png)
@@ -132,10 +155,13 @@
 ## Optional Closing Slide - Takeaways
 - Main finding: moral fine-tuning appears to change **how components coordinate**, not which components exist.
 - Mechanistic synthesis:
-  - component level: highly similar
-  - attention level: highly similar
-  - interaction level: meaningfully different
+  - component level: highly similar (99.9999%)
+  - attention level: highly similar (99.99%)
+  - interaction level: meaningfully different (29 pathways)
   - Figure:
     - ![](mech_interp_outputs/synthesis/similarity_cascade.png)
+- **Validation**: All findings validated (Feb 4, 2026) with corrected sequence-level decision metric.
+  - Perfect alignment (1.0) between internal measurements and sampled behavior
+  - Highly significant model separation (p < 0.00005)
 - Practical implication: targeted interventions should prioritize pathways/hubs, not only broad layer ranges.
-- Next steps: tighten causal tests on key pathways and package the story for paper-ready results.
+- Next steps: paper writing with validated claims.

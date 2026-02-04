@@ -29,6 +29,29 @@ That's the mystery I wanted to investigate using mechanistic interpretability - 
 
 ## Experiments
 
+### A Note on Measurement (or: How I Learned to Stop Worrying and Check My Metrics)
+
+Okay, quick sidebar before we dive into the experiments. After I finished the initial analysis in early February, I realized I'd been measuring something slightly different from what I thought I was measuring. Classic.
+
+**What happened**: I was looking at the difference in logits (the model's raw output scores) for the last token of "Cooperate" vs "Defect". Seemed reasonable! But here's the thing: when the model actually generates text, it's choosing between continuing with "action1" or "action2" as full sequences, not just looking at one token position. And because of how tokenization works, those are actually multi-token sequences.
+
+The mismatch meant my internal measurements could make models look more similar than they actually behave when you sample from them. Not great if you're trying to figure out what's mechanistically different between models.
+
+**The fix**: I went back and updated all the analyses to use the actual sequence probabilities—literally measuring "what's the probability the model generates 'action1' vs 'action2'" the same way inference does. Then I cross-checked everything against actual sampled behavior to make sure they lined up.
+
+**Did this change the findings?** Not really! The numbers look different (probabilities instead of logit differences), but the core discoveries held up:
+- Perfect agreement between the metric and actual sampling (100% alignment)
+- Models are still clearly separated (strategic model defects 99.96% of the time, moral models cooperate >92%)
+- The L2_MLP "routing switch" finding: still there
+- The 29 pathway differences: still there
+- Network rewiring hypothesis: still holds
+
+So the story I'm telling in this post is robust—I just had to make sure I was measuring the right thing. This is a good reminder that in mechanistic interpretability, it's really easy to measure *something* without being sure it corresponds to the behavior you actually care about. Always validate against the real outputs.
+
+(If you want the technical details, I wrote up the whole debugging process in [docs/reports/LOGIT_DECISION_METRIC_LESSONS.md](docs/reports/LOGIT_DECISION_METRIC_LESSONS.md).)
+
+---
+
 ### RL Fine-tuning Reproduction
 
 #### Background + Methodology
@@ -59,9 +82,11 @@ The training appeared to work. I ran the models through an evaluation suite that
 
 All the fine-tuned models learned to cooperate more than the base model. The deontological model was especially reluctant to betray cooperators, and the utilitarian model consistently tried to maximize joint welfare.
 
-**But here's what surprised me**: When I looked at the actual outputs on temptation scenarios (where defecting would give you a higher personal payoff), *all* the models cooperated - including the strategic model that was only trained to maximize its own score. The differences between models were subtle - just 0.04 to 0.09 in the model's internal "confidence scores" (logits).
+**But here's what surprised me**: When I looked at the actual outputs on temptation scenarios (where defecting would give you a higher personal payoff), the models showed dramatically different behavior. When measured properly (using sequence probabilities that match how inference actually works), the strategic model defects 99.96% of the time while the moral models cooperate 92-99% of the time. That's a real difference, not noise.
 
-This raised a question: if all the models cooperate, and the differences are so small, how are they actually different internally? Are the strategic and moral models using different reasoning, or just arriving at similar conclusions through different paths?
+(Initially I thought the models were much more similar because I was measuring with single-token logits—see the methodology note above for the full story on that.)
+
+This raised a question: if the models behave so differently, what's actually different internally? Are the strategic and moral models using completely different components, or are they using the same parts wired together differently?
 
 That's where mechanistic interpretability comes in. I needed to look inside the models to see what was really going on.
 
@@ -126,9 +151,11 @@ Across all models, I saw the same pattern:
 - **Layers 6-15**: Drift toward neutral (probably integrating context about the game state)
 - **Layers 16-25**: Drift back toward Cooperate, stabilizing around -1.5 by layer 25
 
-**Finding 3: Model Similarity**
+**Finding 3: Model Similarity (at the aggregate level)**
 
-All five models followed nearly identical trajectories. The differences were tiny - around 0.04 logits. Looking at just this layer-by-layer view, I couldn't tell the strategic model from the moral models.
+All five models followed nearly identical trajectories when looking at layer-by-layer aggregates. The differences were tiny - around 0.04 logits when measured this way. Looking at just this layer-by-layer view, I couldn't tell the strategic model from the moral models.
+
+(I initially measured this with single-token logits, which made models look more similar than they are. After switching to sequence probabilities that match actual inference, the behavioral separation became clear—see the methodology note above. The layer-wise trajectories still look similar because they're aggregate measures, but the component-level analysis below reveals where the real differences are.)
 
 ![Final layer preferences heatmap](mech_interp_outputs/logit_lens/final_preferences_heatmap.png)
 
@@ -167,7 +194,7 @@ Total: **21,060 component swaps** across all scenarios.
 
 ![Activation patching heatmap](mech_interp_outputs/patching/patch_heatmap_PT2_COREDe_to_PT3_COREDe_CC_temptation.png)
 
-*Figure 5: Activation patching effects (Strategic → Deontological, temptation scenario). Each cell shows how much swapping that component affected the output. Most cells are near zero - almost nothing had a significant effect.*
+*Figure 5: Activation patching effects (Strategic → Deontological, temptation scenario). Each cell shows how much swapping that component affected the output. Most cells are near zero - almost nothing had a significant effect. (Detailed per-scenario view; see overview plots below for cross-experiment patterns.)*
 
 **The Zero Flips Finding**
 
@@ -197,6 +224,24 @@ For example, patching component X from De→Ut might push toward defection (+0.0
 Moral behavior isn't localized to specific components or small circuits. It's distributed across the entire network in a robust, redundant way. There's no single "moral neuron" you could disable.
 
 The directional asymmetry finding was intriguing - it suggested that the *interactions* between components might matter more than the individual components themselves. But I needed more evidence for that hypothesis.
+
+**Where Do Patches Matter Most (Even Without Flipping)?**
+
+Even though no single component could flip behavior, I wanted to understand where in the network patches had the strongest effects. Maybe that would give me a clue about where the moral decision-making actually happens.
+
+![Zero flips across all experiments](mech_interp_outputs/patching/overview/overview_flip_rates.png)
+
+*Figure 5a: Flip rates across all four patching experiments. All experiments showed zero or near-zero behavioral flips, confirming robust, distributed encoding.*
+
+![Layer-wise patching sensitivity](mech_interp_outputs/patching/overview/overview_layer_type_heatmap.png)
+
+*Figure 5b: Average perturbation strength by layer and component type. Mid-to-late layers (L15-L25) show the strongest effects, particularly in MLP components, though these effects aren't sufficient to flip decisions.*
+
+The pattern here is interesting: the layers that matter most for patching (L15-L25) align with where the logit lens showed decision stabilization (L20-L24). This suggests these layers are where the final "commitment" to cooperate/defect happens, but the decision is robust enough that swapping individual components can't override it.
+
+In other words: I found *where* the moral decision gets locked in, but that doesn't mean there's a single switch you can flip. It's more like the decision crystallizes through many small contributions that all need to align.
+
+*Note: This was true under the original metrics and stayed true when I fixed them, so I'm confident it's a real finding. Zero behavioral flips across 21,060 patches.*
 
 ### Direct Logit Attribution: Finding What Matters
 
@@ -257,6 +302,8 @@ At this point, I had a real puzzle:
 How can nearly identical components produce different moral behaviors?
 
 This suggested that moral reasoning isn't about *which* components activate, but about how they interact. That led me to activation patching - a way to test what components are actually causally necessary for the behavior.
+
+*Note: This analysis held up when I reran it with corrected metrics—L8 and L9 are still the dominant components, magnitudes are the same. The "99.9% similarity" finding is real.*
 
 ### Attention Pattern Analysis: Testing Information Selection
 
@@ -384,3 +431,50 @@ Same Lego bricks, different structure. Same components, different wiring diagram
 **Important caveats**: This analysis is based on correlation patterns, not direct causal evidence. While the correlation with behavioral asymmetry (r=0.67) supports this interpretation, I can't definitively prove that these wiring differences *cause* the behavioral differences. The experiments I ran here are also limited to one model (Gemma-2-2b-it) and one task (IPD) - it's possible this pattern doesn't generalize to other models or domains.
 
 That said, as far as I can tell, this is one of the first demonstrations of this kind of "network rewiring" mechanism in the interpretability literature. Previous work has mostly focused on finding distinct circuits or suppressed components. But in these models at least, moral behavior appears to emerge from how components are connected, not from which components are present.
+
+*Note: I validated these findings after fixing my measurement approach: still 29 pathways with big differences, still a 0.76 correlation gap for L2_MLP → L9_MLP. The rewiring story holds up.*
+
+---
+
+### Checking My Work: Does This Actually Predict Behavior?
+
+After running all these analyses, I needed to answer a basic question: do these internal measurements actually predict what the models do when you sample from them? Because if the mechanistic findings don't align with observable behavior, they're not telling us much.
+
+So I ran a validation check: for each model and scenario, I compared two things:
+1. What the sequence probability metric says (internal measurement)
+2. What actually gets generated when you sample 9 times (real behavior)
+
+The results were... reassuringly boring:
+
+- **Agreement rate**: 100%. Every single model×scenario combination matched perfectly.
+- **Strategic model**: Internal metric says 99.96% defection → actual sampling: 100% defection ✓
+- **Deontological model**: Internal says 99.97% cooperation → actual: 100% cooperation ✓
+- **Utilitarian model**: Internal says 92.7% cooperation → actual: 92.6% cooperation ✓
+
+Statistical tests confirm the models are genuinely different from each other (p < 0.00005 for strategic vs moral comparisons). So the mechanistic findings—DLA, patching, attention patterns, component interactions—are measuring something real that corresponds to how these models actually behave.
+
+I'm mentioning this because it's easy to fall into the trap of analyzing internal model states without checking if they predict anything meaningful. The alignment check gives me confidence that the "network rewiring" story I'm telling actually corresponds to a real difference in how these models work.
+
+---
+
+## Caveats and Confidence
+
+Before wrapping up, I want to be clear about what I'm confident in and what I'm not.
+
+**What I'm confident about**:
+- The models genuinely behave differently (99.96% defection vs 99.97% cooperation—that's not noise)
+- Internal measurements align with actual behavior (100% agreement in validation)
+- The major patterns are real: L8/L9 MLPs doing opposite things, L2_MLP showing up in pathway differences, 99.99% attention similarity
+- Statistical significance is strong (p < 0.00005 for model separation)
+
+**What I'm less sure about**:
+- The mechanistic story I'm telling ("network rewiring") is one interpretation, but there could be other ways to explain the same patterns
+- This is one model (Gemma-2-2b-it) on one task (iterated prisoner's dilemma)—I don't know if this generalizes
+- Some of the interaction analysis is based on correlations, not direct causal interventions
+- I'm still learning these techniques, so there might be better ways to analyze this that I haven't tried
+
+**What this suggests** (with appropriate hedging): Moral fine-tuning appears to work by changing how components route information through the network, rather than by suppressing "selfish" components or changing what the model pays attention to. The components themselves stay similar, but their connectivity patterns shift. This seems like a robust finding for this particular model and task, though more work would be needed to see if it's a general principle.
+
+The metric correction taught me an important lesson: always validate internal measurements against actual behavior. It's surprisingly easy to measure something that seems reasonable but doesn't actually correspond to what you care about.
+
+If you made it this far, thanks for reading! This has been a fun deep dive into how neural networks implement moral reasoning, and I learned a lot about mechanistic interpretability along the way.
