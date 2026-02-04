@@ -20,7 +20,10 @@ from pathlib import Path
 from typing import List, Dict
 
 # Add project root to path
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_THIS_FILE = Path(__file__).resolve()
+PROJECT_ROOT = next(
+    p for p in _THIS_FILE.parents if (p / "mech_interp" / "__init__.py").is_file()
+)
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from mech_interp.model_loader import LoRAModelLoader
