@@ -54,8 +54,14 @@ class HookedGemmaModel:
             # Hook for residual stream after attention + MLP
             def make_resid_hook(idx):
                 def hook(module, input, output):
-                    # output[0] is the hidden state (residual stream)
-                    self.cache[f"blocks.{idx}.hook_resid_post"] = output[0].detach()
+                    # Gemma layers return tensor directly, not tuple
+                    # Handle both cases: tensor or tuple
+                    if isinstance(output, tuple):
+                        hidden_states = output[0].detach()
+                    else:
+                        hidden_states = output.detach()
+
+                    self.cache[f"blocks.{idx}.hook_resid_post"] = hidden_states
                     return output
 
                 return hook
@@ -66,14 +72,17 @@ class HookedGemmaModel:
             # Hook for attention outputs (before adding residual)
             def make_attn_hook(idx):
                 def hook(module, input, output):
-                    # output[0] is attention output before residual connection
-                    # output[1] is attention weights (if return_attention_weights=True)
-                    self.cache[f"blocks.{idx}.hook_attn_out"] = output[0].detach()
+                    # Attention modules return tuple: (attention_output, attention_weights, ...)
+                    # Handle both tuple and tensor outputs
+                    if isinstance(output, tuple):
+                        attn_out = output[0].detach()
+                        # Cache attention weights if available
+                        if len(output) > 1 and output[1] is not None:
+                            self.cache[f"model.layers.{idx}.self_attn.attn_weights"] = output[1].detach()
+                    else:
+                        attn_out = output.detach()
 
-                    # Cache attention weights if available
-                    if len(output) > 1 and output[1] is not None:
-                        self.cache[f"model.layers.{idx}.self_attn.attn_weights"] = output[1].detach()
-
+                    self.cache[f"blocks.{idx}.hook_attn_out"] = attn_out
                     return output
 
                 return hook
