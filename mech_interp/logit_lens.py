@@ -143,6 +143,95 @@ class LogitLensAnalyzer:
             
         return np.array(delta_logits)
 
+    def compute_action_trajectory_with_steering(
+        self,
+        prompt: str,
+        steering_layer: int,
+        steering_component: str,
+        steering_vector: torch.Tensor,
+        steering_strength: float,
+    ) -> np.ndarray:
+        """
+        Compute action logit difference across layers WITH steering applied.
+
+        Args:
+            prompt: Input prompt
+            steering_layer: Layer to apply steering at
+            steering_component: Component to steer ("mlp" or "attn")
+            steering_vector: Normalized steering vector
+            steering_strength: Steering strength scalar
+
+        Returns:
+            delta_logits: Array of shape (n_layers,)
+                Positive = prefers Defect, Negative = prefers Cooperate
+        """
+        # Tokenize
+        prepared_prompt = self._prepare_prompt(prompt)
+        input_ids = self.tokenizer(prepared_prompt, return_tensors="pt").input_ids.to(self.model.device)
+
+        # Create steering hook
+        steering_vec_device = steering_vector.to(self.model.device)
+
+        def make_steering_hook(strength):
+            def hook(module, input, output):
+                # Handle both MLP (tensor) and attention (tuple) outputs
+                if isinstance(output, tuple):
+                    # Attention output: (attention_output, attention_weights, ...)
+                    attn_out = output[0]
+                    steered = attn_out.clone()
+                    steered[:, -1, :] += strength * steering_vec_device
+                    return (steered,) + output[1:]  # Re-pack tuple
+                else:
+                    # MLP output: tensor
+                    steered = output.clone()
+                    steered[:, -1, :] += strength * steering_vec_device
+                    return steered
+            return hook
+
+        # Get steering module
+        if steering_component == "mlp":
+            steering_module = self.model.model.model.layers[steering_layer].mlp
+        elif steering_component == "attn":
+            steering_module = self.model.model.model.layers[steering_layer].self_attn
+        else:
+            raise ValueError(f"Unknown component: {steering_component}")
+
+        # Register steering hook
+        handle = steering_module.register_forward_hook(make_steering_hook(steering_strength))
+
+        # Run with cache (steering hook will be active)
+        with torch.no_grad():
+            final_logits, cache = self.model.run_with_cache(input_ids)
+
+        # Remove hook
+        handle.remove()
+
+        # Extract logits at each layer (same as baseline)
+        c_token_id = self.action_tokens['C']
+        d_token_id = self.action_tokens['D']
+
+        delta_logits = []
+        for layer_idx in range(self.model.n_layers):
+            cache_key = f"blocks.{layer_idx}.hook_resid_post"
+
+            if cache_key not in cache:
+                delta_logits.append(np.nan)
+                continue
+
+            # Get hidden state at last token position
+            hidden = cache[cache_key][0, -1, :]  # (d_model,)
+
+            # Apply unembed (with layer norm)
+            logits = self.model.unembed(hidden)  # (vocab_size,)
+
+            c_logit = logits[c_token_id].item()
+            d_logit = logits[d_token_id].item()
+            delta = d_logit - c_logit
+
+            delta_logits.append(delta)
+
+        return np.array(delta_logits)
+
     def analyze_decision_layer(self, trajectory: np.ndarray, threshold: float = 0.5) -> Dict:
         """
         Identify where the decision becomes stable.
@@ -383,6 +472,104 @@ class LogitLensVisualizer:
 
         if output_path:
             plt.savefig(output_path, dpi=150)
+            plt.close()
+        else:
+            plt.show()
+
+    @staticmethod
+    def plot_steering_comparison(
+        baseline_trajectory: np.ndarray,
+        steered_trajectory: np.ndarray,
+        model_id: str,
+        scenario: str,
+        steering_layer: int,
+        steering_component: str,
+        steering_strength: float,
+        output_path: Path = None,
+    ):
+        """
+        Plot baseline vs steered trajectories side-by-side.
+
+        Args:
+            baseline_trajectory: Delta logit trajectory without steering (n_layers,)
+            steered_trajectory: Delta logit trajectory with steering (n_layers,)
+            model_id: Model identifier
+            scenario: Scenario name
+            steering_layer: Layer where steering was applied
+            steering_component: Component steered ("mlp" or "attn")
+            steering_strength: Steering strength used
+            output_path: Path to save plot (optional)
+        """
+        fig, ax = plt.subplots(figsize=(14, 6))
+
+        n_layers = len(baseline_trajectory)
+        layers = np.arange(n_layers)
+
+        # Plot baseline
+        ax.plot(
+            layers,
+            baseline_trajectory,
+            label='Baseline (no steering)',
+            color='steelblue',
+            linewidth=2.5,
+            marker='o',
+            markersize=4,
+            alpha=0.8,
+        )
+
+        # Plot steered
+        ax.plot(
+            layers,
+            steered_trajectory,
+            label=f'Steered (L{steering_layer}_{steering_component.upper()}, strength={steering_strength:+.1f})',
+            color='coral',
+            linewidth=2.5,
+            marker='s',
+            markersize=4,
+            alpha=0.8,
+        )
+
+        # Mark steering layer with vertical line
+        ax.axvline(
+            steering_layer,
+            color='red',
+            linestyle='--',
+            linewidth=2,
+            alpha=0.5,
+            label=f'Steering applied at L{steering_layer}'
+        )
+
+        # Zero line
+        ax.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+
+        # Labels and formatting
+        ax.set_xlabel("Layer", fontsize=14)
+        ax.set_ylabel("Logit(Defect) - Logit(Cooperate)", fontsize=14)
+        ax.set_title(
+            f"Logit Lens with Steering: {MODEL_LABELS.get(model_id, model_id)} - {scenario}",
+            fontsize=16,
+        )
+        ax.legend(fontsize=10, loc='best')
+        ax.grid(alpha=0.3)
+
+        # Add text annotation showing final delta
+        baseline_final = baseline_trajectory[-1]
+        steered_final = steered_trajectory[-1]
+        delta_effect = steered_final - baseline_final
+
+        ax.text(
+            0.02, 0.98,
+            f'Final Δ: {baseline_final:.2f} → {steered_final:.2f} (Δ = {delta_effect:+.2f})',
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        )
+
+        plt.tight_layout()
+
+        if output_path:
+            plt.savefig(output_path, dpi=150, bbox_inches='tight')
             plt.close()
         else:
             plt.show()
