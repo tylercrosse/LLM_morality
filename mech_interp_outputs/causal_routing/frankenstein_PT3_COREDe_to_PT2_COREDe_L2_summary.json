@@ -1,0 +1,17 @@
+{
+  "experiment": "frankenstein",
+  "source_model_id": "PT3_COREDe",
+  "target_model_id": "PT2_COREDe",
+  "transplanted_layer": 2,
+  "transplanted_modules": [
+    "mlp.gate_proj",
+    "mlp.up_proj",
+    "mlp.down_proj"
+  ],
+  "baseline_p_action2_mean": 0.8543038626752442,
+  "transplanted_p_action2_mean": 0.997990898553913,
+  "delta_p_action2": 0.14368703587866882,
+  "baseline_coop_rate": 0.14569613732475584,
+  "transplanted_coop_rate": 0.002009101446087014,
+  "delta_coop_rate": -0.14368703587866882
+}

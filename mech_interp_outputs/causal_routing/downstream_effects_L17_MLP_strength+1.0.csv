@@ -1,0 +1,5 @@
+layer,component,mean_abs_change
+8,L8_MLP,0.0
+9,L9_MLP,0.0
+16,L16_MLP,0.0
+17,L17_MLP,0.01611328125
