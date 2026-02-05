@@ -24,12 +24,25 @@ sys.path.insert(0, str(project_root))
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import pandas as pd
 
 from mech_interp.model_loader import LoRAModelLoader
 from mech_interp.logit_lens import LogitLensAnalyzer
 from mech_interp.utils import load_prompt_dataset, MODEL_LABELS
+
+
+COMPONENT_SORT_ORDER = {"attn": 0, "mlp": 1}
+
+
+def _layer_sort_key(layer_name: str) -> Tuple[int, int, str]:
+    """Sort labels like L2_MLP, L19_ATTN by numeric layer then component."""
+    parts = layer_name.split("_")
+    if len(parts) >= 2 and parts[0].startswith("L") and parts[0][1:].isdigit():
+        layer = int(parts[0][1:])
+        component_rank = COMPONENT_SORT_ORDER.get(parts[1].lower(), 99)
+        return (layer, component_rank, layer_name)
+    return (10**9, 99, layer_name)
 
 
 def compute_all_trajectories(output_dir: Path) -> Dict:
@@ -152,7 +165,14 @@ def plot_all_layers_overlay(
             alpha=0.6, label='Baseline (no steering)', zorder=1)
 
     # Plot steered trajectories for each layer
-    for layer_name, style in layer_styles.items():
+    available_layers = sorted(data['steered'][model_id].keys(), key=_layer_sort_key)
+    for layer_name in available_layers:
+        style = layer_styles.get(layer_name, {
+            "color": "black",
+            "marker": "o",
+            "linestyle": "-",
+            "linewidth": 2.0,
+        })
         if layer_name not in data['steered'][model_id]:
             continue
         if scenario not in data['steered'][model_id][layer_name]:
@@ -343,6 +363,218 @@ def plot_all_scenarios_overlay(
     plt.close()
 
 
+def plot_bidirectional_steering_overlay(
+    data: Dict,
+    model_id: str,
+    scenario: str,
+    output_dir: Path,
+):
+    """
+    Plot all layers with both positive and negative steering on same plot.
+
+    Shows +2.0 and -2.0 strength for each layer with color coding:
+    - Darker shade = positive steering (toward cooperation)
+    - Lighter shade = negative steering (toward defection)
+    """
+
+    layer_configs = {
+        "L17_MLP": {"color_pos": "#1ABC9C", "color_neg": "#7DCEA0", "marker": "v"},
+        "L16_MLP": {"color_pos": "#2ECC71", "color_neg": "#82E0AA", "marker": "D"},
+        "L11_MLP": {"color_pos": "#9B59B6", "color_neg": "#D7BDE2", "marker": "^"},
+        "L9_MLP": {"color_pos": "#3498DB", "color_neg": "#85C1E2", "marker": "s"},
+        "L8_MLP": {"color_pos": "#E74C3C", "color_neg": "#F1948A", "marker": "o"},
+        "L19_ATTN": {"color_pos": "#F39C12", "color_neg": "#F8C471", "marker": "p"},
+    }
+
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    layers = np.arange(26)
+
+    # Plot baseline first (make it prominent)
+    if scenario in data['baselines'][model_id]:
+        baseline = data['baselines'][model_id][scenario]
+        ax.plot(layers, baseline, color='#2C3E50', linestyle='-', linewidth=3.5,
+                alpha=0.8, label='Baseline (no steering)', zorder=10)
+
+    # Plot each layer with both positive and negative steering
+    available_layers = sorted(data['steered'][model_id].keys(), key=_layer_sort_key)
+
+    for layer_name in available_layers:
+        if layer_name not in layer_configs:
+            continue
+        if layer_name not in data['steered'][model_id]:
+            continue
+        if scenario not in data['steered'][model_id][layer_name]:
+            continue
+
+        config = layer_configs[layer_name]
+
+        # Plot negative steering (lighter color, dashed)
+        if -2.0 in data['steered'][model_id][layer_name][scenario]:
+            traj_neg = data['steered'][model_id][layer_name][scenario][-2.0]
+            ax.plot(layers, traj_neg,
+                    color=config['color_neg'],
+                    marker=config['marker'],
+                    markersize=6,
+                    markevery=3,
+                    linestyle='--',
+                    linewidth=2.0,
+                    alpha=0.75,
+                    label=f"{layer_name.replace('_', ' ')} (str=-2.0)")
+
+        # Plot positive steering (darker color, solid)
+        if 2.0 in data['steered'][model_id][layer_name][scenario]:
+            traj_pos = data['steered'][model_id][layer_name][scenario][2.0]
+            ax.plot(layers, traj_pos,
+                    color=config['color_pos'],
+                    marker=config['marker'],
+                    markersize=6,
+                    markevery=3,
+                    linestyle='-',
+                    linewidth=2.5,
+                    alpha=0.9,
+                    label=f"{layer_name.replace('_', ' ')} (str=+2.0)")
+
+    # Reference lines
+    ax.axhline(y=0, color='black', linestyle='-', alpha=0.3, linewidth=1)
+
+    # Labels
+    ax.set_xlabel('Layer', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Logit Difference (Defect - Cooperate)', fontsize=14, fontweight='bold')
+
+    title = f'{MODEL_LABELS.get(model_id, model_id)} | {scenario.replace("_", " ").title()}\nBidirectional Steering Comparison (±2.0)'
+    ax.set_title(title, fontsize=15, fontweight='bold', pad=15)
+
+    # Legend with two columns
+    ax.legend(fontsize=9, loc='best', framealpha=0.95, ncol=2)
+    ax.grid(alpha=0.25, linestyle=':', linewidth=0.5)
+
+    # Annotation
+    ax.text(0.02, 0.98,
+            'Dark/solid = +2.0 (toward cooperation)\nLight/dashed = -2.0 (toward defection)\nNegative = prefers Cooperate\nPositive = prefers Defect',
+            transform=ax.transAxes, fontsize=9, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+
+    plt.tight_layout()
+
+    # Save
+    filename = f"overlay_bidirectional_{model_id}_{scenario}.png"
+    plot_path = output_dir / filename
+    plt.savefig(plot_path, dpi=200, bbox_inches='tight')
+    print(f"  ✓ Saved: {filename}")
+    plt.close()
+
+
+def plot_bidirectional_both_models_overlay(
+    data: Dict,
+    layer_name: str,
+    scenario: str,
+    output_dir: Path,
+):
+    """
+    Plot both models with both positive and negative steering on same plot.
+
+    Shows Strategic and Deontological models, each with +2.0 and -2.0 strength:
+    - Strategic: Red shades (dark=+2.0, light=-2.0)
+    - Deontological: Blue shades (dark=+2.0, light=-2.0)
+    """
+
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    layers = np.arange(26)
+
+    model_configs = {
+        "PT2_COREDe": {
+            "color_pos": "#E74C3C",  # Dark red
+            "color_neg": "#F1948A",  # Light red
+            "color_baseline": "#A93226",  # Darker red for baseline
+            "marker": "o",
+            "label": "Strategic"
+        },
+        "PT3_COREDe": {
+            "color_pos": "#3498DB",  # Dark blue
+            "color_neg": "#85C1E2",  # Light blue
+            "color_baseline": "#1F618D",  # Darker blue for baseline
+            "marker": "s",
+            "label": "Deontological"
+        },
+    }
+
+    for model_id, config in model_configs.items():
+        if model_id not in data['steered']:
+            continue
+        if layer_name not in data['steered'][model_id]:
+            continue
+        if scenario not in data['steered'][model_id][layer_name]:
+            continue
+
+        # Plot baseline (solid, dark, prominent, model-specific color)
+        if scenario in data['baselines'][model_id]:
+            baseline = data['baselines'][model_id][scenario]
+            ax.plot(layers, baseline,
+                    color=config['color_baseline'],
+                    linestyle='-',
+                    linewidth=3.5,
+                    alpha=0.8,
+                    label=f"{config['label']} (baseline)",
+                    zorder=10)
+
+        # Plot negative steering (lighter color, dashed)
+        if -2.0 in data['steered'][model_id][layer_name][scenario]:
+            traj_neg = data['steered'][model_id][layer_name][scenario][-2.0]
+            ax.plot(layers, traj_neg,
+                    color=config['color_neg'],
+                    marker=config['marker'],
+                    markersize=6,
+                    markevery=3,
+                    linestyle='--',
+                    linewidth=2.0,
+                    alpha=0.75,
+                    label=f"{config['label']} (str=-2.0)")
+
+        # Plot positive steering (darker color, solid)
+        if 2.0 in data['steered'][model_id][layer_name][scenario]:
+            traj_pos = data['steered'][model_id][layer_name][scenario][2.0]
+            ax.plot(layers, traj_pos,
+                    color=config['color_pos'],
+                    marker=config['marker'],
+                    markersize=6,
+                    markevery=3,
+                    linestyle='-',
+                    linewidth=2.5,
+                    alpha=0.9,
+                    label=f"{config['label']} (str=+2.0)")
+
+    # Reference lines
+    ax.axhline(y=0, color='black', linestyle='-', alpha=0.3, linewidth=1)
+
+    # Labels
+    ax.set_xlabel('Layer', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Logit Difference (Defect - Cooperate)', fontsize=14, fontweight='bold')
+
+    title = f'{layer_name.replace("_", " ")} | {scenario.replace("_", " ").title()}\nModel Comparison with Bidirectional Steering (±2.0)'
+    ax.set_title(title, fontsize=15, fontweight='bold', pad=15)
+
+    # Legend
+    ax.legend(fontsize=9, loc='best', framealpha=0.95, ncol=2)
+    ax.grid(alpha=0.25, linestyle=':', linewidth=0.5)
+
+    # Annotation
+    ax.text(0.02, 0.98,
+            'Dark/solid = +2.0 (toward cooperation)\nLight/dashed = -2.0 (toward defection)\nRed = Strategic | Blue = Deontological',
+            transform=ax.transAxes, fontsize=9, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+
+    plt.tight_layout()
+
+    # Save
+    filename = f"overlay_bidirectional_both_models_{layer_name}_{scenario}.png"
+    plot_path = output_dir / filename
+    plt.savefig(plot_path, dpi=200, bbox_inches='tight')
+    print(f"  ✓ Saved: {filename}")
+    plt.close()
+
+
 def plot_key_comparisons(data: Dict, output_dir: Path):
     """Generate key comparison plots for paper/presentation."""
 
@@ -484,7 +716,7 @@ def main():
 
     if cache_file.exists():
         print("Loading cached trajectories...")
-        data = torch.load(cache_file)
+        data = torch.load(cache_file, weights_only=False)
         print("✓ Loaded from cache\n")
     else:
         data = compute_all_trajectories(output_base)
@@ -494,7 +726,7 @@ def main():
 
     # Generate overlay plots
     models = ["PT2_COREDe", "PT3_COREDe"]
-    layers = ["L17_MLP", "L16_MLP", "L8_MLP", "L9_MLP", "L11_MLP", "L19_ATTN"]
+    layers = sorted(["L17_MLP", "L16_MLP", "L8_MLP", "L9_MLP", "L11_MLP", "L19_ATTN"], key=_layer_sort_key)
     scenarios = ["CC_continue", "CC_temptation", "CD_punished", "DC_exploited", "DD_trapped"]
     strengths = [-2.0, 2.0]
 
@@ -514,7 +746,7 @@ def main():
     print("GENERATING BOTH-MODELS OVERLAY PLOTS")
     print("="*80)
 
-    for layer_name in ["L17_MLP", "L16_MLP", "L11_MLP"]:  # Focus on key layers
+    for layer_name in sorted(["L17_MLP", "L16_MLP", "L11_MLP"], key=_layer_sort_key):  # Focus on key layers
         print(f"\n{layer_name}:")
         for scenario in scenarios:
             for strength in strengths:
@@ -527,11 +759,31 @@ def main():
 
     for model_id in models:
         print(f"\n{model_id}:")
-        for layer_name in ["L17_MLP", "L16_MLP", "L8_MLP"]:  # Focus on key layers
+        for layer_name in sorted(["L17_MLP", "L16_MLP", "L8_MLP"], key=_layer_sort_key):  # Focus on key layers
             for strength in strengths:
                 plot_all_scenarios_overlay(data, model_id, layer_name, strength, output_dir)
 
-    # 4. Key comparison plots
+    # 4. Bidirectional steering overlay (positive and negative on same plot)
+    print("\n" + "="*80)
+    print("GENERATING BIDIRECTIONAL STEERING OVERLAY PLOTS")
+    print("="*80)
+
+    for model_id in models:
+        print(f"\n{model_id}:")
+        for scenario in scenarios:
+            plot_bidirectional_steering_overlay(data, model_id, scenario, output_dir)
+
+    # 5. Bidirectional both-models overlay (both models with +/- steering)
+    print("\n" + "="*80)
+    print("GENERATING BIDIRECTIONAL BOTH-MODELS OVERLAY PLOTS")
+    print("="*80)
+
+    for layer_name in sorted(["L17_MLP", "L16_MLP", "L11_MLP"], key=_layer_sort_key):
+        print(f"\n{layer_name}:")
+        for scenario in scenarios:
+            plot_bidirectional_both_models_overlay(data, layer_name, scenario, output_dir)
+
+    # 6. Key comparison plots
     plot_key_comparisons(data, output_dir)
 
     # Summary
@@ -548,6 +800,12 @@ def main():
     print(f"     - Shows why early layer steering fails (signal washout)")
     print(f"  3. KEY_model_universality_l17.png")
     print(f"     - Tests if steering patterns are universal across models")
+    print(f"  4. overlay_bidirectional_*.png ← NEW!")
+    print(f"     - Shows +2.0 and -2.0 steering on same plot for single model")
+    print(f"     - Makes effect size and symmetry obvious")
+    print(f"  5. overlay_bidirectional_both_models_*.png ← NEW!")
+    print(f"     - Shows both models with +2.0 and -2.0 steering")
+    print(f"     - Tests model universality and asymmetry together")
     print(f"\nAdditional plots:")
     print(f"  - overlay_all_layers_*.png - Compare all layers for same model/scenario")
     print(f"  - overlay_both_models_*.png - Compare Strategic vs Deontological")

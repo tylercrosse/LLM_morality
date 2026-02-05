@@ -93,6 +93,19 @@ TIER2_EXPERIMENTS = [
 
 MODELS_TO_TEST = ["PT2_COREDe", "PT3_COREDe"]  # Strategic, Deontological
 STEERING_STRENGTHS = [-2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0]
+COMPONENT_SORT_ORDER = {"attn": 0, "mlp": 1}
+
+
+def _layer_name_sort_key(name: str) -> Tuple[int, int, str]:
+    """
+    Sort keys like L2_MLP, L19_ATTN by numeric layer then component type.
+    """
+    parts = name.split("_")
+    if len(parts) >= 2 and parts[0].startswith("L") and parts[0][1:].isdigit():
+        layer = int(parts[0][1:])
+        component_rank = COMPONENT_SORT_ORDER.get(parts[1].lower(), 99)
+        return (layer, component_rank, name)
+    return (10**9, 99, name)
 
 
 # ==============================================================================
@@ -469,13 +482,15 @@ def plot_comparison_bar(df: pd.DataFrame, output_dir: Path):
     """Generate bar plot comparing cooperation changes across layers."""
     fig, ax = plt.subplots(figsize=(12, 6))
 
+    ordered_names = sorted(df["name"].unique(), key=_layer_name_sort_key)
+
     # Pivot data for grouped bar chart
     pivot = df.pivot_table(
         index='name',
         columns='model',
         values='delta_coop_pct',
         aggfunc='first'
-    )
+    ).reindex(ordered_names)
 
     pivot.plot(kind='bar', ax=ax, color=['steelblue', 'coral'])
     ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
@@ -502,7 +517,13 @@ def plot_sweep_overlay(df: pd.DataFrame, output_dir: Path):
     fig, ax = plt.subplots(figsize=(10, 6))
 
     # Group by layer and model
-    for (name, model), group in df.groupby(['name', 'model']):
+    grouped = df.groupby(['name', 'model'], sort=False)
+    sorted_groups = sorted(
+        grouped,
+        key=lambda item: (_layer_name_sort_key(item[0][0]), item[0][1]),
+    )
+
+    for (name, model), group in sorted_groups:
         # Load sweep results
         component = group.iloc[0]['component']
         layer = group.iloc[0]['layer']
@@ -537,13 +558,15 @@ def plot_effect_heatmap(df: pd.DataFrame, output_dir: Path):
     """Generate heatmap of effect sizes across layers."""
     fig, ax = plt.subplots(figsize=(10, 6))
 
+    ordered_names = sorted(df["name"].unique(), key=_layer_name_sort_key)
+
     # Pivot data for heatmap
     pivot = df.pivot_table(
         index='name',
         columns='model',
         values='effect_size',
         aggfunc='first'
-    )
+    ).reindex(ordered_names)
 
     sns.heatmap(
         pivot,
