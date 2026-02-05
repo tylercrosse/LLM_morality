@@ -135,6 +135,32 @@
 - Figure:
   - ![](mech_interp_outputs/attention_analysis/attention_comparison_Deontological_vs_Utilitarian.png)
 
+## Slide 14A - Linear Probe Analysis (Representation Equivalence)
+
+**Question**: Do models represent moral concepts differently?
+
+**Method**: Trained linear classifiers to decode:
+- Betrayal detection (binary classification)
+- Joint payoff prediction (regression)
+- Applied to residual stream activations at each layer (0-25)
+
+**Result**: All models identical
+- Peak layer: 13 (universal across all 5 models, including base)
+- Betrayal accuracy: ~45% (chance level, barely above 50%)
+- Joint payoff R²: 0.74-0.75 (strong, but identical across models)
+- No Deontological vs Utilitarian differences
+
+**Three-Level Diagnostic**:
+1. ✓ Information selection (attention): 99.99% identical
+2. ✓ Linear representations (probes): Identical across models
+3. ✗ Component interactions: Significant differences (next slide)
+
+**Implication**: Differences operate at connectivity level, not at attention or representation level
+
+**Figures**:
+- ![](mech_interp_outputs/linear_probes/betrayal_probe_comparison.png)
+- ![](mech_interp_outputs/linear_probes/payoff_probe_comparison.png)
+
 ## Slide 15 - Component Interaction Analysis (Methodology)
 - Built 52x52 interaction maps (26 ATTN + 26 MLP) from component activation correlations.
 - Compared De vs Ut interaction structure rather than individual component magnitudes.

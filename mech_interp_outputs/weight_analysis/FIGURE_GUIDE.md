@@ -2,6 +2,9 @@
 
 This guide explains the visualizations generated from LoRA adapter weight analysis, including how data was collected, what each plot represents, and what patterns to look for.
 
+For a deeper methods + model-specific walkthrough of the normalized heatmaps, see:
+`HEATMAP_CREATION_AND_INTERPRETATION.md`
+
 ---
 
 ## Data Collection Overview

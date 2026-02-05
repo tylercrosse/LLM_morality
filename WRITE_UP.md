@@ -344,6 +344,52 @@ They use the same input data - the distinction must be in *how they process* tha
 
 This pushed me toward the final analysis: looking at how components interact with each other.
 
+---
+
+### Linear Probes: The "Identical Representation" Finding
+
+#### Background + Methodology
+
+At this point, I had a puzzle. Models attend to the same things (99.99% identical attention), but act differently. Maybe they're extracting different *representations* from what they're seeing?
+
+I trained linear classifiers to decode two key concepts from the models' internal representations at each layer:
+1. **Betrayal detection**: Is this a betrayal scenario? (binary classification)
+2. **Joint payoff prediction**: What's the total score? (regression)
+
+The hypothesis: Maybe Deontological models strongly represent "betrayal" early in the network, while Utilitarian models strongly represent "payoff."
+
+For each model, I trained simple probes (logistic regression for betrayal, ridge regression for payoff) on the residual stream activations at every layer (0-25). The dataset had 15 IPD scenarios with labels for whether each was a "betrayal" situation and what the joint payoff was.
+
+#### Results + Reflection
+
+**The result**: All five models—Strategic, Deontological, Utilitarian, Hybrid, and even the untrained Base—showed *identical* probe performance.
+
+![Betrayal Probe Comparison](mech_interp_outputs/linear_probes/betrayal_probe_comparison.png)
+
+![Payoff Probe Comparison](mech_interp_outputs/linear_probes/payoff_probe_comparison.png)
+
+*Figure: Linear probe performance across all 5 models. Top: Betrayal detection accuracy barely exceeds chance (50%). Bottom: Joint payoff prediction is strong (R² = 0.74-0.75) but identical across models. No Deontological vs Utilitarian differences.*
+
+Key findings:
+- **Betrayal detection**: ~45% accuracy (barely above chance) across all models, peaking at Layer 13
+- **Joint payoff**: R² = 0.74-0.75 across layers, peaking at Layer 13
+- **No differences** between moral frameworks
+- Even the untrained Base model shows the same patterns
+
+This is another null result, but it's informative. Combined with identical attention patterns, this shows that models aren't achieving different behavior by:
+- Detecting different information (attention is the same)
+- Representing information differently (linear probes are the same)
+
+**What This Suggests**
+
+The poor betrayal detection (~45%, barely above chance) is interesting. It suggests that "betrayal" as a concept might not be linearly separable in these models' representations—it might be encoded in a more distributed or nonlinear way.
+
+But the key takeaway is negative evidence: if moral frameworks differed in how they represent concepts, we'd see different probe performance. We don't. This rules out another mechanism.
+
+So where do the differences come from? That's what led me to the component interaction analysis...
+
+---
+
 ### The Multi-Level Investigation: Where Do Differences Actually Emerge?
 
 At this point, I had systematically ruled out several mechanisms. Let me zoom out and show the complete picture of where similarities and differences exist:
