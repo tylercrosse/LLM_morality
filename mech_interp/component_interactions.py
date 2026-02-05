@@ -10,6 +10,7 @@ but differ in how components coordinate (e.g., L8_MLP → L25 head connections).
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import numpy as np
@@ -229,6 +230,37 @@ class InteractionComparator:
         self.results_dir = Path(results_dir)
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _component_sort_key(component_name: str) -> Tuple[int, int, int]:
+        """Sort key for chronological ordering (L0_ATTN, L0_MLP, L1_ATTN, ...)."""
+        attn_mlp_match = re.match(r"^L(\d+)_(ATTN|MLP)$", component_name)
+        if attn_mlp_match:
+            layer = int(attn_mlp_match.group(1))
+            component_type = attn_mlp_match.group(2)
+            type_order = 0 if component_type == "ATTN" else 1
+            return (layer, type_order, 0)
+
+        head_match = re.match(r"^L(\d+)H(\d+)$", component_name)
+        if head_match:
+            layer = int(head_match.group(1))
+            head = int(head_match.group(2))
+            return (layer, 0, head)
+
+        # Fallback for any unexpected naming pattern.
+        return (10**9, 10**9, 10**9)
+
+    @staticmethod
+    def _display_model_name(model_name: str) -> str:
+        """Human-readable model label for plot titles."""
+        model_map = {
+            "PT3_COREDe": "Deontological",
+            "PT3_COREUt": "Utilitarian",
+            "PT2_COREDe": "Strategic",
+            "PT4_COREDe": "Strategic+Deontological",
+            "base": "Base Model",
+        }
+        return model_map.get(model_name, model_name)
+
     def compare_correlation_matrices(
         self,
         corr1: np.ndarray,
@@ -278,7 +310,8 @@ class InteractionComparator:
         component_names: List[str],
         model_name: str,
         output_path: Optional[str] = None,
-        top_n: int = 50
+        top_n: int = 50,
+        order_mode: str = "clustered"
     ):
         """Plot correlation matrix heatmap.
 
@@ -288,6 +321,7 @@ class InteractionComparator:
             model_name: Model name for title
             output_path: Where to save plot
             top_n: Only plot top N most variable components
+            order_mode: "clustered" (existing behavior) or "chronological"
         """
         # Select top N components with highest variance
         variances = np.var(corr_matrix, axis=1)
@@ -296,13 +330,20 @@ class InteractionComparator:
         corr_subset = corr_matrix[top_indices][:, top_indices]
         names_subset = [component_names[i] for i in top_indices]
 
-        # Perform hierarchical clustering
-        linkage = hierarchy.linkage(corr_subset, method='average')
-        dendro = hierarchy.dendrogram(linkage, no_plot=True)
-        order = dendro['leaves']
-
-        corr_ordered = corr_subset[order][:, order]
-        names_ordered = [names_subset[i] for i in order]
+        if order_mode == "chronological":
+            order = sorted(
+                range(len(names_subset)),
+                key=lambda i: self._component_sort_key(names_subset[i]),
+            )
+            corr_ordered = corr_subset[order][:, order]
+            names_ordered = [names_subset[i] for i in order]
+        else:
+            # Perform hierarchical clustering
+            linkage = hierarchy.linkage(corr_subset, method='average')
+            dendro = hierarchy.dendrogram(linkage, no_plot=True)
+            order = dendro['leaves']
+            corr_ordered = corr_subset[order][:, order]
+            names_ordered = [names_subset[i] for i in order]
 
         # Plot
         fig, ax = plt.subplots(figsize=(14, 12))
@@ -320,7 +361,8 @@ class InteractionComparator:
             cbar_kws={'label': 'Correlation'}
         )
 
-        ax.set_title(f'Component Interaction Matrix: {model_name}\n(Top {top_n} most variable components)',
+        display_name = self._display_model_name(model_name)
+        ax.set_title(f'Component Interaction Matrix: {display_name} ({model_name})\n(Top {top_n} most variable components)',
                      fontsize=14, pad=20)
         plt.xticks(rotation=90, fontsize=8)
         plt.yticks(rotation=0, fontsize=8)
@@ -343,7 +385,8 @@ class InteractionComparator:
         model1_name: str,
         model2_name: str,
         output_path: Optional[str] = None,
-        top_n: int = 50
+        top_n: int = 50,
+        order_mode: str = "variance"
     ):
         """Plot correlation difference matrix.
 
@@ -354,6 +397,7 @@ class InteractionComparator:
             model2_name: Name for model 2
             output_path: Where to save plot
             top_n: Only plot top N components with largest differences
+            order_mode: "variance" (existing behavior) or "chronological"
         """
         # Select top N components with largest variance in differences
         variances = np.var(diff_matrix, axis=1)
@@ -361,6 +405,14 @@ class InteractionComparator:
 
         diff_subset = diff_matrix[top_indices][:, top_indices]
         names_subset = [component_names[i] for i in top_indices]
+
+        if order_mode == "chronological":
+            sort_order = sorted(
+                range(len(names_subset)),
+                key=lambda i: self._component_sort_key(names_subset[i]),
+            )
+            diff_subset = diff_subset[sort_order][:, sort_order]
+            names_subset = [names_subset[i] for i in sort_order]
 
         # Plot
         fig, ax = plt.subplots(figsize=(14, 12))
@@ -563,6 +615,16 @@ def compare_deontological_vs_utilitarian(
     # Plot difference matrix
     diff_matrix = de_corr - ut_corr
     comparator.plot_difference_matrix(diff_matrix, de_names, "Deontological", "Utilitarian")
+    chrono_plot = output_dir / "interaction_diff_Deontological_vs_Utilitarian_chronological.png"
+    comparator.plot_difference_matrix(
+        diff_matrix,
+        de_names,
+        "Deontological",
+        "Utilitarian",
+        output_path=str(chrono_plot),
+        top_n=len(de_names),
+        order_mode="chronological",
+    )
 
     # Identify significant pathway differences
     significant_pathways = comparator.identify_pathway_differences(comparison_df, threshold=0.3)
