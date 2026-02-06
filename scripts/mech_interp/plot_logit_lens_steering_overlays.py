@@ -32,6 +32,10 @@ from mech_interp.logit_lens import LogitLensAnalyzer
 from mech_interp.utils import load_prompt_dataset, MODEL_LABELS
 
 
+# Configuration: Use sequence-level trajectory computation (compliant with decision metrics)
+# Set to False to use legacy single-token 'C' vs 'D' method
+USE_SEQUENCE_LEVEL = True
+
 COMPONENT_SORT_ORDER = {"attn": 0, "mlp": 1}
 
 
@@ -93,10 +97,15 @@ def compute_all_trajectories(output_dir: Path) -> Dict:
 
         # Compute baselines for all scenarios
         baselines[model_id] = {}
+        metric_type = "sequence-level (action1 vs action2)" if USE_SEQUENCE_LEVEL else "legacy (C vs D tokens)"
+        print(f"  Using {metric_type} metric")
         for scenario in scenarios:
             prompt = prompts_dict[scenario]
             print(f"  Computing baseline: {scenario}...")
-            baselines[model_id][scenario] = analyzer.compute_action_trajectory(prompt)
+            if USE_SEQUENCE_LEVEL:
+                baselines[model_id][scenario] = analyzer.compute_action_trajectory_sequence_level(prompt)
+            else:
+                baselines[model_id][scenario] = analyzer.compute_action_trajectory(prompt)
 
         # Compute steered trajectories
         steered[model_id] = {}
@@ -121,13 +130,22 @@ def compute_all_trajectories(output_dir: Path) -> Dict:
 
                 for strength in strengths:
                     print(f"    {scenario}, strength={strength:+.1f}...", end=" ")
-                    traj = analyzer.compute_action_trajectory_with_steering(
-                        prompt=prompt,
-                        steering_layer=exp['layer'],
-                        steering_component=exp['component'],
-                        steering_vector=steering_vector,
-                        steering_strength=strength,
-                    )
+                    if USE_SEQUENCE_LEVEL:
+                        traj = analyzer.compute_action_trajectory_with_steering_sequence_level(
+                            prompt=prompt,
+                            steering_layer=exp['layer'],
+                            steering_component=exp['component'],
+                            steering_vector=steering_vector,
+                            steering_strength=strength,
+                        )
+                    else:
+                        traj = analyzer.compute_action_trajectory_with_steering(
+                            prompt=prompt,
+                            steering_layer=exp['layer'],
+                            steering_component=exp['component'],
+                            steering_vector=steering_vector,
+                            steering_strength=strength,
+                        )
                     steered[model_id][layer_name][scenario][strength] = traj
                     print("✓")
 
@@ -209,7 +227,11 @@ def plot_all_layers_overlay(
 
     # Annotation
     direction = "toward cooperation" if strength > 0 else "toward defection"
-    ax.text(0.02, 0.98, f'Steering direction: {direction}\nPositive = prefers Defect\nNegative = prefers Cooperate',
+    if USE_SEQUENCE_LEVEL:
+        interpretation = 'Positive = prefers action2 (Defect)\nNegative = prefers action1 (Cooperate)'
+    else:
+        interpretation = 'Positive = prefers Defect\nNegative = prefers Cooperate [LEGACY]'
+    ax.text(0.02, 0.98, f'Steering direction: {direction}\n{interpretation}',
             transform=ax.transAxes, fontsize=9, verticalalignment='top',
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
@@ -440,7 +462,10 @@ def plot_bidirectional_steering_overlay(
 
     # Labels
     ax.set_xlabel('Layer', fontsize=14, fontweight='bold')
-    ax.set_ylabel('Logit Difference (Defect - Cooperate)', fontsize=14, fontweight='bold')
+    if USE_SEQUENCE_LEVEL:
+        ax.set_ylabel('Log-Prob Difference (action2 - action1)', fontsize=14, fontweight='bold')
+    else:
+        ax.set_ylabel('Logit Difference (Defect - Cooperate) [LEGACY]', fontsize=14, fontweight='bold')
 
     title = f'{MODEL_LABELS.get(model_id, model_id)} | {scenario.replace("_", " ").title()}\nBidirectional Steering Comparison (±2.0)'
     ax.set_title(title, fontsize=15, fontweight='bold', pad=15)
@@ -450,8 +475,12 @@ def plot_bidirectional_steering_overlay(
     ax.grid(alpha=0.25, linestyle=':', linewidth=0.5)
 
     # Annotation
+    if USE_SEQUENCE_LEVEL:
+        interpretation = 'Positive = prefers action2 (Defect)\nNegative = prefers action1 (Cooperate)'
+    else:
+        interpretation = 'Positive = prefers Defect\nNegative = prefers Cooperate [LEGACY]'
     ax.text(0.02, 0.98,
-            'Dark/solid = +2.0 (toward cooperation)\nLight/dashed = -2.0 (toward defection)\nNegative = prefers Cooperate\nPositive = prefers Defect',
+            f'Dark/solid = +2.0 (toward cooperation)\nLight/dashed = -2.0 (toward defection)\n{interpretation}',
             transform=ax.transAxes, fontsize=9, verticalalignment='top',
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
@@ -550,7 +579,10 @@ def plot_bidirectional_both_models_overlay(
 
     # Labels
     ax.set_xlabel('Layer', fontsize=14, fontweight='bold')
-    ax.set_ylabel('Logit Difference (Defect - Cooperate)', fontsize=14, fontweight='bold')
+    if USE_SEQUENCE_LEVEL:
+        ax.set_ylabel('Log-Prob Difference (action2 - action1)', fontsize=14, fontweight='bold')
+    else:
+        ax.set_ylabel('Logit Difference (Defect - Cooperate) [LEGACY]', fontsize=14, fontweight='bold')
 
     title = f'{layer_name.replace("_", " ")} | {scenario.replace("_", " ").title()}\nModel Comparison with Bidirectional Steering (±2.0)'
     ax.set_title(title, fontsize=15, fontweight='bold', pad=15)
@@ -560,8 +592,12 @@ def plot_bidirectional_both_models_overlay(
     ax.grid(alpha=0.25, linestyle=':', linewidth=0.5)
 
     # Annotation
+    if USE_SEQUENCE_LEVEL:
+        interpretation = 'Pos = action2 (Defect) | Neg = action1 (Coop)'
+    else:
+        interpretation = 'Pos = Defect | Neg = Coop [LEGACY]'
     ax.text(0.02, 0.98,
-            'Dark/solid = +2.0 (toward cooperation)\nLight/dashed = -2.0 (toward defection)\nRed = Strategic | Blue = Deontological',
+            f'Dark/solid = +2.0 (→coop) | Light/dashed = -2.0 (→defect)\nRed = Strategic | Blue = Deontological\n{interpretation}',
             transform=ax.transAxes, fontsize=9, verticalalignment='top',
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
@@ -709,10 +745,13 @@ def main():
     print("="*80)
     print("LOGIT LENS STEERING OVERLAY PLOTS")
     print("="*80)
-    print(f"\nOutput directory: {output_dir}\n")
+    print(f"\nOutput directory: {output_dir}")
+    print(f"Metric: {'SEQUENCE-LEVEL (action1 vs action2)' if USE_SEQUENCE_LEVEL else 'LEGACY (C vs D tokens)'}")
+    print()
 
     # Compute or load trajectories
-    cache_file = output_base / "trajectory_cache.pt"
+    cache_suffix = "_sequence_level" if USE_SEQUENCE_LEVEL else "_legacy"
+    cache_file = output_base / f"trajectory_cache{cache_suffix}.pt"
 
     if cache_file.exists():
         print("Loading cached trajectories...")
