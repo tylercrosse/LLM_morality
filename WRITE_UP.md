@@ -82,7 +82,25 @@ The training appeared to work. I ran the models through an evaluation suite that
 
 All the fine-tuned models learned to cooperate more than the base model. The deontological model was especially reluctant to betray cooperators, and the utilitarian model consistently tried to maximize joint welfare.
 
-**But here's what surprised me**: When I looked at the actual outputs on temptation scenarios (where defecting would give you a higher personal payoff), the models showed dramatically different behavior. When measured properly (using sequence probabilities that match how inference actually works), the strategic model defects 99.96% of the time while the moral models cooperate 92-99% of the time. That's a real difference, not noise.
+![Cross-game generalization across 5 social dilemma games](publication_figures_5model/cross_game_generalization_publication.png)
+
+*Figure 1a: Action choices across five iterated matrix games (Prisoner's Dilemma, Stag Hunt, Chicken, Bach-or-Stravinsky, and Defective Coordination), broken down by model. The models were only trained on IPD — this generalization to other games emerged on its own.*
+
+The cross-game results were particularly interesting. Even though training only used the Prisoner's Dilemma, the moral models transferred their cooperative tendencies to structurally different games. The Deontological model cooperated almost universally, while the base and strategic models showed much more game-dependent behavior. This suggests the fine-tuning didn't just teach "cooperate in IPD" — it shifted something more general about how the model approaches social decisions.
+
+![Reciprocity patterns across models](publication_figures_5model/reciprocity_comparison_publication.png)
+
+*Figure 1b: Reciprocity signatures for each model, showing action choices conditioned on the opponent's previous move (C|C = cooperate when they cooperated, D|C = defect when they cooperated, etc.). The Deontological model shows near-zero betrayal (D|C), while the Strategic model frequently exploits cooperators.*
+
+The reciprocity data revealed distinct "moral signatures." The Deontological model was the most loyal — when the opponent cooperated, it almost never betrayed them (nearly 100% C|C). The Strategic model, by contrast, had a sizable D|C rate, meaning it would happily exploit a cooperating partner. These aren't just different cooperation rates; they're qualitatively different strategies.
+
+![Prompt robustness across 4 prompt formats](publication_figures_5model/prompt_robustness_publication.png)
+
+*Figure 1c: Action choices across four prompt variations of IPD — Structured, Unstructured, Poetic, and Explicit formats. The moral models cooperate robustly regardless of prompt style. The behavioral differences are not prompt-dependent.*
+
+I also wanted to make sure the behavioral differences weren't fragile — maybe the models only cooperated because of specific wording in the evaluation prompts. So I tested four different prompt formats: a structured game-theory style, an unstructured natural-language version, a poetic framing, and an explicit payoff-focused framing. The moral models cooperated across all four. The strategic model defected across all four. The behavioral differences are robust to surface-level prompt variation, which suggests something deeper changed in the model's decision-making.
+
+**What's particularly striking when you look at the numbers**: the models showed dramatically different behavior on temptation scenarios (where defecting would give you a higher personal payoff). When measured properly (using sequence probabilities that match how inference actually works), the strategic model defects 99.96% of the time while the moral models cooperate 92-99% of the time. That's a real difference, not noise.
 
 (Initially I thought the models were much more similar because I was measuring with single-token logits—see the methodology note above for the full story on that.)
 
@@ -136,7 +154,7 @@ The logit lens lets us ask: "If the model stopped at layer 5, what would it outp
 
 ![Layer-wise trajectories showing U-shaped curves](mech_interp_outputs/logit_lens/all_scenarios_grid.png)
 
-*Figure 1: Layer-wise action preferences through all 26 layers, across 5 models and 5 scenarios. Negative values favor Cooperate, positive favors Defect.*
+*Figure 2a: Layer-wise action preferences through all 26 layers, across 5 models and 5 scenarios. Negative values favor Cooperate, positive favors Defect.*
 
 **Finding 1: The Layer 0 Bias**
 
@@ -157,9 +175,17 @@ All five models followed nearly identical trajectories when looking at layer-by-
 
 (I initially measured this with single-token logits, which made models look more similar than they are. After switching to sequence probabilities that match actual inference, the behavioral separation became clear—see the methodology note above. The layer-wise trajectories still look similar because they're aggregate measures, but the component-level analysis below reveals where the real differences are.)
 
+But when I zoomed into individual scenarios, a more nuanced picture emerged. Here's the temptation scenario specifically — where the payoff matrix incentivizes defection:
+
+![Layer-by-layer logit evolution for CC_temptation across all 5 models](mech_interp_outputs/logit_lens/comparison_CC_temptation.png)
+
+*Figure 2b: Layer-by-layer logit trajectories for the CC_temptation scenario, comparing all 5 models. Unlike the aggregate grid (Figure 2a) where models overlap, here the Strategic model dramatically diverges from the moral models around Layer 16-17, shooting toward pro-Defect while the Deontological and Utilitarian models stay pro-Cooperate. This is where the behavioral difference actually lives.*
+
+This is much more revealing than the aggregate view. All models track together through the early layers (0-15), but right around layers 16-17, the Strategic model breaks away sharply toward defection while the moral models hold firm. The base model and Hybrid drift toward neutral. This layer 16-17 divergence point will come back as a major theme later in the causal experiments.
+
 ![Final layer preferences heatmap](mech_interp_outputs/logit_lens/final_preferences_heatmap.png)
 
-*Figure 2: Final layer (Layer 25) preferences across models and scenarios. All blue = all prefer Cooperate.*
+*Figure 2c: Final layer (Layer 25) preferences across models and scenarios. All blue = all prefer Cooperate.*
 
 **What This Meant**
 
@@ -275,6 +301,14 @@ These two adjacent layers have opposite, powerful effects - and they're present 
 
 This suggests these components encode cooperation/defection concepts that emerged during Gemma's original pretraining, not from the moral fine-tuning.
 
+For comparison, here's the same top-20 component ranking for the Deontological model:
+
+![Top components for Deontological model](mech_interp_outputs/dla/dla_top_components_PT3_COREDe.png)
+
+*Figure 3b: Top-20 DLA components for the Deontological model (PT3_COREDe). Compare to Figure 3 (Strategic): L8_MLP and L9_MLP still dominate in both, with nearly identical magnitudes. The ranking order is remarkably preserved — this is the same "hardware" being used by a model with very different behavior.*
+
+The similarity is striking. L9_MLP (pro-Cooperate) and L8_MLP (pro-Defect) dominate the Deontological model just as they dominate the Strategic one. The top-20 list is essentially the same components in the same order. If you were hoping to find that moral fine-tuning created dedicated "moral components" or suppressed "selfish" ones, this is the figure that kills that hypothesis.
+
 ![MLP contributions across models](mech_interp_outputs/dla/dla_mlps_CC_temptation.png)
 
 *Figure 4: MLP contributions in the temptation scenario. All models show nearly identical patterns, with L8 (positive, pro-Defect) and L9 (negative, pro-Cooperate) dominating.*
@@ -368,7 +402,7 @@ For each model, I trained simple probes (logistic regression for betrayal, ridge
 
 ![Payoff Probe Comparison](mech_interp_outputs/linear_probes/payoff_probe_comparison.png)
 
-*Figure: Linear probe performance across all 5 models. Top: Betrayal detection accuracy barely exceeds chance (50%). Bottom: Joint payoff prediction is strong (R² = 0.74-0.75) but identical across models. No Deontological vs Utilitarian differences.*
+*Figure 7a: Linear probe performance across all 5 models. Top: Betrayal detection accuracy barely exceeds chance (50%). Bottom: Joint payoff prediction is strong (R² = 0.74-0.75) but identical across models. No Deontological vs Utilitarian differences.*
 
 Key findings:
 - **Betrayal detection**: ~45% accuracy (barely above chance) across all models, peaking at Layer 13
@@ -396,7 +430,7 @@ At this point, I had systematically ruled out several mechanisms. Let me zoom ou
 
 ![Multi-level similarity analysis](mech_interp_outputs/synthesis/similarity_cascade.png)
 
-*Figure: Multi-level investigation showing where moral differences emerge. Component activations and attention patterns are nearly identical (>99.9% similar), but component interactions show significant differences (6.8% of pathways differ substantially). This suggests moral fine-tuning rewires how components connect rather than changing which components activate.*
+*Figure 7b: Multi-level investigation showing where moral differences emerge. Component activations and attention patterns are nearly identical (>99.9% similar), but component interactions show significant differences (6.8% of pathways differ substantially). This suggests moral fine-tuning rewires how components connect rather than changing which components activate.*
 
 The pattern is striking: nearly perfect similarity in *what* activates and *what* the models attend to, but significant differences in *how* components interact. This visualization captures the systematic investigation process - ruling out mechanisms until finding where differences actually emerge.
 
@@ -422,9 +456,21 @@ The analysis:
 
 #### Results + Reflection
 
-![Correlation difference heatmap](mech_interp_outputs/component_interactions/interaction_diff_Deontological_vs_Utilitarian.png)
+Before looking at where the models differ, it helps to see what the raw interaction structure looks like for each model individually. Here are the full 52×52 correlation matrices:
 
-*Figure 6: Correlation differences between Deontological and Utilitarian models (52×52 matrix). Hot spots show pathways that are "wired" differently, with substantial differences spread across many layer pairs rather than concentrated in a single component.*
+![Deontological model correlation matrix](mech_interp_outputs/component_interactions/correlation_matrix_PT3_COREDe_chronological.png)
+
+![Utilitarian model correlation matrix](mech_interp_outputs/component_interactions/correlation_matrix_PT3_COREUt_chronological.png)
+
+*Figures 6a-b: Component interaction matrices for the Deontological (top) and Utilitarian (bottom) models, with components ordered chronologically by layer. Red indicates positive correlation (components activate together), blue indicates negative correlation (one activates when the other doesn't). Both matrices show similar large-scale structure — strong positive correlations along the diagonal (neighboring layers work together) and block patterns in early vs. late layers. But look carefully at the mid-layer region (around L8-L17): the correlation signs and magnitudes differ between models.*
+
+At a glance, these look very similar. That's the point. The global structure of component interactions is preserved — both models have similar block-diagonal patterns, similar early-layer clusters, similar late-layer clusters. The differences are subtle and distributed, which is exactly what you'd expect from "same components, different wiring."
+
+Now, to make those differences visible, here's what you get when you subtract one matrix from the other:
+
+![Correlation difference heatmap](mech_interp_outputs/component_interactions/interaction_diff_Deontological_vs_Utilitarian_chronological.png)
+
+*Figure 6c: Correlation differences between Deontological and Utilitarian models (52×52 matrix, chronological ordering). Hot spots show pathways that are "wired" differently, with notable clusters around L1_MLP, L12-L13, and L16-L17 — the same deep-layer region that shows up in the steering experiments later.*
 
 **The Discovery: Network Rewiring**
 
@@ -536,6 +582,50 @@ But then I tried steering deeper layers:
 **This was a surprise!** The routing switches exist, but they're in layers 16-17, not layer 2. The early interaction analysis pointed to L2 because of correlation patterns, but causal interventions revealed the real switches are much deeper in the network—in the final third of the model, where decisions are being finalized.
 
 This makes intuitive sense: early layers might show correlation differences because they're transmitting signals that get amplified later, but the actual routing control happens in the deeper layers where the model is making its final decision.
+
+To make this comparison concrete, here are all the steering sweeps overlaid on a single plot:
+
+![All steering sweeps overlaid](mech_interp_outputs/causal_routing/comparison_sweep_overlay.png)
+
+*Figure 8a: All steering sweeps overlaid. Each line shows cooperation rate as a function of steering strength for a different layer/component. The L16 and L17 MLP curves (steep positive slopes) tower over the flat L2 MLP line. This single plot captures the key finding: late-layer MLPs are the real routing switches.*
+
+The overlay makes the story impossible to miss. The L16/L17 MLP curves are steep and responsive — small changes in steering strength produce large behavioral shifts. The L2 MLP curve is essentially a flat line. Everything I said about "the routing switches are in deep layers, not early layers" is visible in this one figure.
+
+For a more compact summary across models, here's a heatmap of effect sizes:
+
+![Effect size heatmap by layer and model](mech_interp_outputs/causal_routing/effect_size_heatmap.png)
+
+*Figure 8b: Effect sizes for steering at each tested layer/component, across the Strategic (PT2) and Deontological (PT3) models. L17_MLP has the largest effect in both models (1.39 and 1.27 respectively), followed by L16_MLP. L8_MLP and L9_MLP — the components that dominate DLA contributions — have near-zero steering effect.*
+
+This heatmap highlights an important distinction. L8 and L9 MLPs are the biggest contributors in the DLA analysis (Figure 3) — they carry the strongest cooperation/defection signals. But they have near-zero steering effect sizes. Meanwhile, L16 and L17 MLPs are modest DLA contributors but have massive steering effects. The components that *encode* the signal are not the same components that *control* which signal wins. That's a crucial mechanistic insight.
+
+#### Seeing Steering Through the Logit Lens
+
+To understand *how* steering changes the model's internal processing (not just the final output), I combined the steering experiments with the logit lens technique from earlier. This lets us trace the layer-by-layer decision trajectory under different steering interventions.
+
+![Bidirectional steering trajectories for Deontological model](mech_interp_outputs/causal_routing/logit_lens_steering/overlays/overlay_bidirectional_PT3_COREDe_CC_temptation.png)
+
+*Figure 8c: Layer-by-layer logit trajectories for the Deontological model on the CC_temptation scenario, under bidirectional steering at multiple layers. Solid lines show +2.0 steering (toward cooperation); dashed lines show -2.0 steering (toward defection). The baseline (black) is the unsteered trajectory. Late-layer steering (L16, L17) produces visible divergence from baseline in the final layers, while early-layer steering (L8) has minimal lasting effect.*
+
+This plot reveals something the behavioral metrics alone can't show: *where* in the network steering takes hold. When you steer at L16 or L17, the trajectory visibly diverges from baseline in the late layers and stays diverged through the final output. When you steer at L8 or L9, the trajectory briefly shifts but then reconverges with baseline — the effect washes out.
+
+Even more telling is comparing how the same steering intervention affects different models:
+
+![L16 MLP steering comparison between Strategic and Deontological](mech_interp_outputs/causal_routing/logit_lens_steering/overlays/overlay_bidirectional_both_models_L16_MLP_CC_temptation.png)
+
+*Figure 8d: L16 MLP bidirectional steering comparison between the Strategic (red) and Deontological (blue) models on the CC_temptation scenario. Both models respond to L16 steering, with the Strategic model's trajectory pulled toward cooperation under positive steering and the Deontological model's pulled toward defection under negative steering. L16 MLP acts as a bidirectional switch in both models.*
+
+This is strong evidence that L16 MLP is a genuine routing hub: steering it in opposite directions produces opposite behavioral effects, and this works consistently across both models.
+
+And here's what I think is the single most important figure from this entire investigation:
+
+![Early vs late steering washout](mech_interp_outputs/causal_routing/logit_lens_steering/overlays/KEY_early_vs_late_washout.png)
+
+*Figure 8e: The washout experiment. Both curves show +2.0 cooperative steering applied to the Strategic model on CC_temptation. Red: steering at L8 MLP (early layer). Green: steering at L17 MLP (late layer). The L8 steering creates a brief effect but washes out by layer 16 — subsequent layers "overwrite" the early intervention. The L17 steering persists through to the final output because there aren't enough remaining layers to override it.*
+
+This figure captures the core mechanistic insight in a single image. Early-layer steering washes out because the network has 15+ subsequent layers that can correct the perturbation. Late-layer steering persists because there simply isn't enough network left to override it. This is why L16/L17 are effective routing switches and L8 isn't — it's not that early layers don't carry cooperation/defection signals (they do, as DLA showed), but that those signals pass through a gauntlet of subsequent processing that can override any single perturbation.
+
+This also explains why single-component activation patching (from the earlier experiment) produced zero behavioral flips across 21,060 patches. Even if you perturb the right component, the distributed processing in subsequent layers compensates. Only pathway-level interventions (replacing multiple consecutive layers) or late-layer steering (where there's no room for compensation) can actually flip behavior.
 
 #### Experiment 3: Path Patching—Proving Pathway Causality
 
