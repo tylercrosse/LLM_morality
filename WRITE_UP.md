@@ -28,35 +28,35 @@ They trained the models against a Tit-for-Tat opponent (an agent that cooperates
 
 These questions underlined this research. To answer them I used a set of techniques for looking inside neural networks to understand how they compute their outputs. These techniques are often buckted as 'mechanistic interpretability.' This blog post walks through what I found.
 
-This research was done as part of my Capstone project for the month-long [ARENA](https://www.arena.education/) program in London, where I sharpened my research engineering skills. I've tried to form a coherent narrative out of the experiments in this project, but in reality, the research process was much messier. Many early attempts were only partially successful, and much of the initial work was simply throwing mud at the wall to see what stuck and to build my intuition for different mechanistic interpretability techniques. A lot of this story was woven together after the fact to make sense of the varied results I gathered. If this were a formal paper, the structure would be quite different—but I hope that seeing the varied experiments I tried, and my openness about both the positive and negative results, makes for a more useful and authentic read.
+This research was done as part of my Capstone project for the month-long [ARENA](https://www.arena.education/) program in London, where I sharpened my research engineering skills. I've tried to form a coherent narrative out of the experiments in this project, but in reality, the research process was much messier. Many early attempts were only partially successful, and much of the initial work was simply throwing mud at the wall to see what stuck and to build my intuition for different mechanistic interpretability techniques. A lot of this story was woven together after the fact to make sense of the varied results I gathered. If this were a formal paper, the structure would be quite different, but I hope that seeing the varied experiments I tried, and my openness about both the positive and negative results, makes for a more useful and authentic read.
 
 > [!note]
 > This post assumes some basic familiarity with machine learning concepts (e.g., neural networks, training), but I try to explain the mechanistic interpretability techniques (like logit lens or activation patching) as they are introduced. If you understand the basic premise of the Prisoner's Dilemma, you should be able to follow the high-level narrative!
 
 ### High Level Overview
 
-Here is a high-level overview of the sequence of experiments, how each one motivated the next, and how they collectively build to the final conclusion.
+Here is a high-level overview of the sequence of experiments, how each one motivated the next, and how they collaboratively map the mechanics of moral alignment.
 
 ```mermaid
 graph TD
     classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef paradox fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
+    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
     classDef test fill:#e1d5e7,stroke:#9673a6,stroke-width:1px;
     classDef causal fill:#dae8fc,stroke:#6c8ebf,stroke-width:1px;
 
     %% High-level narrative arc
-    FT[Fine-tuning & Evaluation] --> Paradox{The Paradox:<br>Different Behaviors,<br>Identical Components}
-    Paradox --> Tests[Ruling out Hypotheses:<br>Attention & Probes]
+    FT[Fine-tuning & Evaluation] --> Mystery{The Mystery of Shallow Alignment:<br>Different Behaviors,<br>Nearly Identical Components}
+    Mystery --> Tests[Ruling out Localized Circuits:<br>Attention & Probes]
     Tests --> Breakthrough[The Breakthrough:<br>Component Interactions]
-    Breakthrough --> Mech[Causal Proof:<br>Network Rewiring]
+    Breakthrough --> Mech[Causal Proof:<br>Network Rewiring & Deep Routing]
 
     class FT setup;
-    class Paradox paradox;
+    class Mystery feature;
     class Tests test;
     class Breakthrough,Mech causal;
 ```
 
-## Part 1: Setting the Stage — Fine-tuning and Evaluation
+## Part 1: Setting the Stage - Fine-tuning and Evaluation
 
 ### Fine-tuning
 
@@ -98,7 +98,7 @@ When you look at the numbers, the models showed dramatically different behavior 
 
 (Initially I thought the models were much more similar because I was measuring with single-token logits; see the methodology note above for the full story on that.)
 
-This raised a question: if the models behave so differently, what's actually different internally? Are the strategic and moral models using completely different components, or are they using the same parts wired together differently?
+This raised a question: if the models behave so differently, what's actually different internally? Does fine-tuning a model to be moral "cure" its selfishness by suppressing early representations, or does it just suppress the translation of those signals into action?
 
 To answer that, I used mechanistic interpretability to inspect internal computation directly.
 
@@ -132,7 +132,7 @@ These scenarios became the foundation for all my subsequent analyses.
 
 ---
 
-## Part 2: Looking Inside — Logit Lens & Attribution
+## Part 2: Looking Inside - Logit Lens & Attribution
 
 ### Logit Lens
 
@@ -257,37 +257,39 @@ _Figure 3b: Top-20 DLA components for the Deontological model (PT3_COREDe). Comp
 
 The similarity is striking. L9_MLP (pro-Cooperate) and L8_MLP (pro-Defect) dominate the Deontological model just as they dominate the Strategic one. The top-20 list is essentially the same components in the same order. If you were hoping to find that moral fine-tuning created dedicated "moral components" or suppressed "selfish" ones, this is the figure that kills that hypothesis.
 
-**The Paradox of Suppression**
+### The Illusion of Suppression (Shallow Alignment)
 
 I went into this expecting to find that moral fine-tuning "suppresses" selfish components - maybe turning off the pro-Defect circuits or weakening them significantly.
 
 That's not what I found. Comparing the strategic model to the moral models, the largest change in any component was just **0.047** - tiny compared to the base magnitudes of 7-9 for L8/L9.
 
-Even weirder: **L8_MLP (the most pro-Defect component) actually increased slightly in the moral models.** It didn't get suppressed - if anything, it got stronger. The changes from moral fine-tuning were distributed as tiny nudges across many mid-to-late layer MLPs, with no single component showing dramatic suppression or enhancement.
+Even more notably: **L8_MLP (the most pro-Defect component) actually increased slightly in the moral models.** It didn't get suppressed - if anything, it got stronger. The changes from moral fine-tuning were distributed as tiny nudges across many mid-to-late layer MLPs, with no single component showing dramatic suppression or enhancement.
 
-**Paradoxical results?**
+This is an interesting finding for AI safety. It proves that the moral fine-tuning was "shallow." The model's fundamental "selfish" capabilities (represented in L8/L9) were not lobotomized or deleted; they remain fully intact and operational in the moral models.
 
-At this point, I had a real puzzle:
+### The Mechanism Question
+
+At this point, I had a new mystery:
 
 - Models behave differently (strategic vs moral)
 - But they have nearly identical components (99.9% similar)
-- The most "selfish" component didn't get suppressed
+- The fundamental "selfish" components remain fully intact
 - Changes are subtle and distributed
 
-How can nearly identical components produce different moral behaviors?
+If the components are the same and the original selfish capabilities persist, how do the moral models actually produce different behavior?
 
 DLA showed me correlations: which components are _associated_ with cooperation or defection. But correlation isn't causation. I needed to test: if I actually swap a component from one model into another, does the behavior change?
 
 _Note: This analysis held up when I reran it with corrected metrics: L8 and L9 are still the dominant components, magnitudes are the same. The "99.9% similarity" finding is real._
 
-### The Paradox: Identical Parts, Different Behavior
+### The Search for the Mechanism: Identical Parts, Different Behavior
 
-Before moving on to the next set of experiments, here is where we are in our investigation. We've hit a paradox, and we need to test new hypotheses to solve it.
+Before moving on to the next set of experiments, here is where we are in our investigation. We've established that the alignment is shallow, so we need to test new hypotheses to uncover the actual routing mechanism.
 
 ```mermaid
 graph TD
     classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef paradox fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
+    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
 
     %% Base Setup
     FT[RL Fine-tuning Reproductions] --> Eval[Evaluation Scenarios]
@@ -296,11 +298,11 @@ graph TD
 
     class FT,Eval setup;
 
-    %% The Paradox
-    LL -- Shows when decisions stabilize --> Paradox{The Paradox:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
-    DLA -- Shows dominant components,<br>but no suppression --> Paradox
+    %% The Mystery
+    LL -- Shows when decisions stabilize --> Mystery{The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
+    DLA -- Shows dominant components,<br>but no suppression --> Mystery
 
-    class Paradox paradox;
+    class Mystery feature;
 ```
 
 ---
@@ -338,13 +340,13 @@ Total: **21,060 component swaps** across all scenarios.
 
 _Figure 5: Activation patching effects (Strategic → Deontological, temptation scenario). Each cell shows how much swapping that component affected the output. Most cells are near zero - almost nothing had a significant effect. (Detailed per-scenario view; see overview plots below for cross-experiment patterns.)_
 
-**The Zero Flips Finding**
+**Is there a Localized Moral Switch?**
 
 Out of 21,060 component swaps across all my experiments: **zero behavioral flips.**
 
 Not a single swap changed a model from Cooperate to Defect or vice versa.
 
-This was notable. I expected to find at least _some_ critical components, maybe a "moral override circuit" that could be disabled, or a "selfishness circuit" that could be restored. But there wasn't one.
+This cleanly rules out the idea of a localized "moral circuit" or a simple switch. There is no single component that can be disabled to restore selfishness or enabled to enforce morality.
 
 **What Did Happen?**
 
@@ -362,11 +364,11 @@ One interesting pattern: when I did bidirectional patching between Deontological
 
 For example, patching component X from De→Ut might push toward defection (+0.02), but patching the same component from Ut→De might push toward cooperation (-0.03). Same component, opposite effect depending on context.
 
-**What This Suggests**
+**What This Suggests: Distributed Routing**
 
-Moral behavior isn't localized to specific components or small circuits. It's distributed across the entire network in a robust, redundant way. There's no single "moral neuron" you could disable.
+Moral behavior isn't localized to specific components or small circuits. There's no single "moral neuron" you could disable. Instead, the alignment is distributed across the network in a robust, redundant way.
 
-The directional asymmetry finding was intriguing - it suggested that the _interactions_ between components might matter more than the individual components themselves. But I needed more evidence for that hypothesis.
+The directional asymmetry finding was a crucial clue, it suggested that the interactions between components might matter more than the individual components themselves. The fine-tuning wasn't changing the parts; it was changing how the parts communicated. But I needed more evidence for that hypothesis.
 
 **Where Do Patches Matter Most (Even Without Flipping)?**
 
@@ -376,7 +378,7 @@ Even though no single component could flip behavior, I wanted to understand wher
 
 _Figure 5a: Average perturbation strength by layer and component type. Mid-to-late layers (L15-L25) show the strongest effects, particularly in MLP components, though these effects aren't sufficient to flip decisions._
 
-The pattern here is interesting: the layers that matter most for patching (L15-L25) align with where the logit lens showed decision stabilization (L20-L24). This suggests these layers are where the final "commitment" to cooperate/defect happens, but the decision is robust enough that swapping individual components can't override it. 
+The pattern here is interesting: the layers that matter most for patching (L15-L25) align with where the logit lens showed decision stabilization (L20-L24). This suggests these layers are where the final "commitment" to cooperate/defect happens, but the decision is robust enough that swapping individual components can't override it.
 
 Notice the spike in perturbation strength at Layer 16. While patching here didn't flip the behavior, this locus becomes the central character in our later steering experiments as the primary routing hub.
 
@@ -546,7 +548,7 @@ I found:
 - **251 pathways strongly different** (`|difference| > 0.5`)
 - **94 pathways very strongly different** (`|difference| > 0.7`)
 
-This explained the paradox. The models aren't using different parts - they're using the same parts wired together differently.
+This explained the mystery. The models aren't using entirely different parts - they're using identical parts wired together differently, routing the signals along different pathways.
 
 **From "single switch" to distributed rewiring**
 
@@ -576,7 +578,7 @@ Think of the model like a company. The employees (components) are exactly the sa
 
 **Important caveats**: This analysis is based on correlation patterns, not direct causal evidence. While the correlation with behavioral asymmetry (r=0.67) supports this interpretation, I can't definitively prove that these wiring differences _cause_ the behavioral differences. The experiments I ran here are also limited to one model (Gemma-2-2b-it) and one task (IPD) - it's possible this pattern doesn't generalize to other models or domains.
 
-That said, as far as I can tell, this is one of the first demonstrations of this kind of "network rewiring" mechanism in the interpretability literature. Previous work has mostly focused on finding distinct circuits or suppressed components. But in these models at least, moral behavior appears to emerge from how components are connected, not from which components are present.
+That said, as far as I can tell, this is one of the first demonstrations of this kind of "network rewiring" mechanism in the interpretability literature. Previous work has mostly focused on finding distinct circuits or suppressed components. But in these models at least, moral alignment appears to emerge from shallow, distributed routing changes, not from fundamental representational changes.
 
 #### A Quick Check: Was L2_MLP Heavily Retrained?
 
@@ -604,15 +606,16 @@ _Note: I revalidated this section after fixing the measurement approach and reru
 
 ---
 
-### New Hypothesis: Network Rewiring
+### New Hypothesis: Network Rewiring & Deep Routing
 
-With the discovery of differing component interactions, our roadmap looks like this. The null results from patching, attention, and probes forced us to look at interactions, creating a new hypothesis that we now need to prove causally.
+With the discovery of differing component interactions, our roadmap looks like this. The null results from patching, attention, and probes forced us to discard the localized switch hypothesis, creating a new hypothesis around routing that we now need to prove causally.
 
 ```mermaid
 graph TD
     classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef paradox fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
+    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
     classDef test fill:#e1d5e7,stroke:#9673a6,stroke-width:1px;
+    classDef causal fill:#dae8fc,stroke:#6c8ebf,stroke-width:1px;
 
     %% Base Setup
     FT[RL Fine-tuning Reproductions] --> Eval[Evaluation Scenarios]
@@ -621,16 +624,16 @@ graph TD
 
     class FT,Eval setup;
 
-    %% The Paradox
-    LL -- Shows when decisions stabilize --> Paradox{The Paradox:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
-    DLA -- Shows dominant components,<br>but no suppression --> Paradox
+    %% The Mystery
+    LL -- Shows when decisions stabilize --> Mystery{The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
+    DLA -- Shows dominant components,<br>but no suppression --> Mystery
 
-    class Paradox paradox;
+    class Mystery feature;
 
     %% Hypothesis Testing
-    Paradox --> AP[Activation Patching]
-    Paradox --> Attn[Attention Analysis]
-    Paradox --> Probes[Linear Probes]
+    Mystery --> AP[Activation Patching]
+    Mystery --> Attn[Attention Analysis]
+    Mystery --> Probes[Linear Probes]
 
     class AP,Attn,Probes test;
 
@@ -642,9 +645,9 @@ graph TD
     class Interact test;
 
     %% The Breakthrough
-    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Experiments}
+    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Proof:<br>Routing Bypass}
 
-    class Causal paradox;
+    class Causal causal;
 ```
 
 ---
@@ -751,7 +754,7 @@ _Figure 8e: The washout experiment. Both curves show +2.0 cooperative steering a
 
 This figure summarizes the mechanism. Early-layer steering washes out because the network has 15+ subsequent layers that can "correct" the perturbation; in effect, distributed downstream processing overrules the single-layer change. Late-layer steering persists because there isn't enough network left to override it.
 
-This explains the paradox of why the strongest component (L9_MLP) has no control: it's too early in the chain. The model listens to it, but subsequent layers have the power to veto it. The real power lies in the final routing layers (L16/L17) that make the decision stick.
+This explains the mystery of why the strongest component (L9_MLP) has no control: it's too early in the chain. The model listens to it, but subsequent layers have the power to veto it. The real power lies in the final routing layers (L16/L17) that make the decision stick.
 
 This also explains why single-component activation patching (from the earlier experiment) produced zero behavioral flips across 21,060 patches. Even if you perturb the right component, the distributed processing in subsequent layers compensates. Only pathway-level interventions (replacing multiple consecutive layers) or late-layer steering (where there's no room for compensation) can actually flip behavior.
 
@@ -796,7 +799,7 @@ The causal experiments forced me to revise my mechanistic story:
 Here's the picture that emerged:
 
 - **Early layers (L2-L5)** transmit information through pathways, with attention mechanisms playing the dominant role
-- **Deep layers (L16-L17)** contain the actual routing switches that control whether the model cooperates or defects
+- **Deep layers (L16-L17)** contain the actual routing switches that bypass or overrule the early "selfish" signals
 - **The routing operates primarily through attention pathways** (3x more effective than MLP pathways)
 - **Moral fine-tuning reconfigures these deep pathways** rather than creating a single early-layer switch
 
@@ -861,7 +864,7 @@ Here is the full roadmap of the investigation, bringing all the experiments and 
 ```mermaid
 graph TD
     classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef paradox fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
+    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
     classDef test fill:#e1d5e7,stroke:#9673a6,stroke-width:1px;
     classDef causal fill:#dae8fc,stroke:#6c8ebf,stroke-width:1px;
     classDef conclusion fill:#d5e8d4,stroke:#82b366,stroke-width:2px;
@@ -874,16 +877,16 @@ graph TD
 
     class FT,Eval setup;
 
-    %% The Paradox
-    LL -- Shows when decisions stabilize --> Paradox{The Paradox:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
-    DLA -- Shows dominant components,<br>but no suppression --> Paradox
+    %% The Mystery
+    LL -- Shows when decisions stabilize --> Mystery{The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
+    DLA -- Shows dominant components,<br>but no suppression --> Mystery
 
-    class Paradox paradox;
+    class Mystery feature;
 
     %% Hypothesis Testing
-    Paradox --> AP[Activation Patching]
-    Paradox --> Attn[Attention Analysis]
-    Paradox --> Probes[Linear Probes]
+    Mystery --> AP[Activation Patching]
+    Mystery --> Attn[Attention Analysis]
+    Mystery --> Probes[Linear Probes]
 
     class AP,Attn,Probes test;
 
@@ -895,9 +898,9 @@ graph TD
     class Interact test;
 
     %% The Breakthrough
-    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Experiments}
+    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Proof:<br>Routing Bypass}
 
-    class Causal paradox;
+    class Causal causal;
 
     %% Testing the Mechanism
     Causal --> Exp1["Exp 1: Frankenstein Test<br>(Transplanting Weights)"]
