@@ -26,16 +26,20 @@ They trained the models against a Tit-for-Tat opponent (an agent that cooperates
 
 **What actually changed inside the model?** When you fine-tune a model to be more moral, are you suppressing "selfish" neurons? Or creating new "moral" circuits? Or maybe changing what the model pays attention to?
 
-These questions underlined this research. To answer them I used a set of techniques for looking inside neural networks to understand how they compute their outputs. These techniques are often buckted as 'mechanistic interpretability.' This blog post walks through what I found.
+This question connects to a concern circulating in AI safety circles. When you train a model to embody an aligned persona, what happens to its capacity for selfish behavior? A concept called the **"Waluigi Effect"** (named after Mario's mischievous foil, coined by [Nardo 2023](https://www.lesswrong.com/posts/D7PumeYTDPfBTp3i7/the-waluigi-effect-mega-post)) suggests a troubling answer: training hard on an aligned persona doesn't erase the opposite, it actually sharpens the inverse persona's definition. If you drill "Cooperate" into a model, its internal conception of "Defect" becomes equally crisp and accessible. The selfish version is still there, just waiting to be triggered.
 
-This research was done as part of my Capstone project for the month-long [ARENA](https://www.arena.education/) program in London, where I sharpened my research engineering skills. I've tried to form a coherent narrative out of the experiments in this project, but in reality, the research process was much messier. Many early attempts were only partially successful, and much of the initial work was simply throwing mud at the wall to see what stuck and to build my intuition for different mechanistic interpretability techniques. A lot of this story was woven together after the fact to make sense of the varied results I gathered. If this were a formal paper, the structure would be quite different, but I hope that seeing the varied experiments I tried, and my openness about both the positive and negative results, makes for a more useful and authentic read.
+<!-- This was the central question I wanted to investigate mechanistically: is moral fine-tuning a genuine values transformation, or more like a costume, a routing change that leaves the original selfishness fully intact beneath the surface? -->
+
+To answer these questions I used a set of techniques for looking inside neural networks to understand how they compute their outputs. These techniques are often grouped under 'mechanistic interpretability.' This blog post walks through what I found.
+
+This reseach was done as part of my Capstone project for the month-long [ARENA](https://www.arena.education/) program in London where I sharpened my research engineering skills. Armed with this knowledge, I was keen to dig a bit deeper.
 
 > [!note]
 > This post assumes some basic familiarity with machine learning concepts (e.g., neural networks, training), but I try to explain the mechanistic interpretability techniques (like logit lens or activation patching) as they are introduced. If you understand the basic premise of the Prisoner's Dilemma, you should be able to follow the high-level narrative!
 
 ### High Level Overview
 
-Here is a high-level overview of the sequence of experiments, how each one motivated the next, and how they collaboratively map the mechanics of moral alignment.
+Here is a high-level overview of the sequence of experiments, how each one motivated the next, and how they collectively build to the final conclusion.
 
 ```mermaid
 graph TD
@@ -56,7 +60,7 @@ graph TD
     class Breakthrough,Mech causal;
 ```
 
-## Part 1: Setting the Stage - Fine-tuning and Evaluation
+## Part 1: Setting the Stage — Fine-tuning and Evaluation
 
 ### Fine-tuning
 
@@ -88,7 +92,7 @@ The training appeared to work. Using the original paper's evaluation suite and p
 
 Most importantly, the models developed distinct "moral signatures," which can be seen in their reciprocity patterns:
 
-![Reciprocity patterns across models](publication_figures_5model/reciprocity_comparison_publication.png)
+![Reciprocity patterns across models](./blog_bundle_write_up/reciprocity_comparison_publication.png)
 
 _Figure 1: Reciprocity signatures for each model, showing action choices conditioned on the opponent's previous move (C|C = cooperate when they cooperated, D|C = defect when they cooperated, etc.). The Deontological model shows near-zero betrayal (D|C), while the Strategic model frequently exploits cooperators._
 
@@ -98,7 +102,7 @@ When you look at the numbers, the models showed dramatically different behavior 
 
 (Initially I thought the models were much more similar because I was measuring with single-token logits; see the methodology note above for the full story on that.)
 
-This raised a question: if the models behave so differently, what's actually different internally? Does fine-tuning a model to be moral "cure" its selfishness by suppressing early representations, or does it just suppress the translation of those signals into action?
+This raised a question: if the models behave so differently, what's actually different internally? Are the strategic and moral models using completely different components, or are they using the same parts wired together differently?
 
 To answer that, I used mechanistic interpretability to inspect internal computation directly.
 
@@ -132,7 +136,7 @@ These scenarios became the foundation for all my subsequent analyses.
 
 ---
 
-## Part 2: Looking Inside - Logit Lens & Attribution
+## Part 2: Looking Inside — Logit Lens & Attribution
 
 ### Logit Lens
 
@@ -140,7 +144,7 @@ These scenarios became the foundation for all my subsequent analyses.
 
 Now for the actual interpretability work. I started with a technique called **logit lens** - a way to see what the model is "thinking" at each layer.
 
-![Logit Lens Concept](pics/fig-logit-lens.png)
+![Logit Lens Concept](./blog_bundle_write_up/fig-logit-lens.png)
 
 Here's how transformers work: they have 26 layers (in Gemma-2-2b-it), and each layer progressively refines the model's understanding. Think of it like solving a problem in 26 steps - each step builds on the previous one.
 
@@ -148,7 +152,8 @@ The logit lens lets us ask: "If the model stopped at layer 5, what would it outp
 
 **Implementation**: I built a custom wrapper around the Gemma model that caches what's happening at each layer. For each layer, I project the hidden state through the final output layer and measure: does this layer push toward Cooperate or Defect? The result is a "Δ logit" (delta logit) - negative means Cooperate, positive means Defect.
 
-##### A Note on Measurement (or: How I Learned to Stop Worrying and Check My Metrics)
+<details>
+<summary><strong>Technical Note: A Note on Measurement</strong> (or: How I Learned to Stop Worrying and Check My Metrics)</summary>
 
 Before diving into experiments, there is one important measurement note. After the initial analysis in early February, I realized the metric I used was not aligned with the behavior-level quantity I cared about.
 
@@ -170,11 +175,13 @@ So the story I'm telling in this post is robust; I just had to make sure I was m
 
 (If you want the technical details, I wrote up the whole debugging process in [docs/reports/LOGIT_DECISION_METRIC_LESSONS.md](docs/reports/LOGIT_DECISION_METRIC_LESSONS.md).)
 
+</details>
+
 _Note: For the analyses below, I used sequence probability metrics rather than single-token logits to ensure my measurements matched how the models actually behave during inference. I've included a detailed note on why this distinction matters in the [Appendix](#appendix-a-note-on-measurement) at the end of this post._
 
 #### Findings
 
-![Layer-wise trajectories showing U-shaped curves](mech_interp_outputs/logit_lens/all_scenarios_grid.png)
+![Layer-wise trajectories showing U-shaped curves](./blog_bundle_write_up/all_scenarios_grid.png)
 
 _Figure 2a: Layer-wise action preferences through all 26 layers, across 5 models and 5 scenarios. Negative values favor Cooperate, positive favors Defect._
 
@@ -200,13 +207,13 @@ All five models followed nearly identical trajectories when looking at layer-by-
 
 But when I zoomed into individual scenarios, a more nuanced picture emerged. Here's the temptation scenario specifically, where the payoff matrix incentivizes defection:
 
-![Layer-by-layer logit evolution for CC_temptation across all 5 models](mech_interp_outputs/logit_lens/comparison_CC_temptation.png)
+![Layer-by-layer logit evolution for CC_temptation across all 5 models](./blog_bundle_write_up/comparison_CC_temptation.png)
 
 _Figure 2b: Layer-by-layer logit trajectories for the CC_temptation scenario, comparing all 5 models. Unlike the aggregate grid (Figure 2a) where models overlap, here the Strategic model dramatically diverges from the moral models around Layer 16-17, shooting toward pro-Defect while the Deontological and Utilitarian models stay pro-Cooperate. This is where the behavioral difference actually lives._
 
 This is much more revealing than the aggregate view. All models track together through the early layers (0-15), but right around layers 16-17, the Strategic model breaks away sharply toward defection while the moral models hold firm. The base model and Hybrid drift toward neutral. This layer 16-17 divergence point will come back as a major theme later in the causal experiments.
 
-![Final layer preferences heatmap](mech_interp_outputs/logit_lens/final_preferences_heatmap.png)
+![Final layer preferences heatmap](./blog_bundle_write_up/final_preferences_heatmap.png)
 
 _Figure 2c: Final layer (Layer 25) preferences across models and scenarios. All blue = all prefer Cooperate._
 
@@ -216,13 +223,13 @@ This was puzzling. If the models are so similar layer-by-layer, how do they diff
 
 That led me to the next analysis: decomposing the model into individual components to see which ones drive the cooperation decision.
 
-### Direct Logit Attribution: Finding What Matters
+### Direct Logit Attribution: The Illusion of Suppression
 
 #### Setup
 
 The logit lens showed that all layers contribute to the final decision, but I needed to know _which specific components_ matter most. I used Direct Logit Attribution (DLA) for that.
 
-![Direct Logit Attribution Concept](pics/fig-dla.png)
+![Direct Logit Attribution Concept](./blog_bundle_write_up/fig-dla.png)
 
 Think of the model like a group project where everyone contributes something to the final answer. DLA lets me measure each person's individual contribution. The model has 234 components total:
 
@@ -236,55 +243,48 @@ This gives me a score for every component showing how much it contributes to the
 
 #### Findings
 
-![Top components ranked by contribution](mech_interp_outputs/dla/dla_top_components_PT2_COREDe.png)
+![Top components ranked by contribution](./blog_bundle_write_up/dla_top_components_PT2_COREDe.png)
 
 _Figure 3: Top-20 components ranked by their contribution to the action decision. L8_MLP and L9_MLP completely dominate._
 
-**Layers 8 and 9's MLP components are universal cooperation/defection encoders.** This was the strongest finding out of the DLA experiments.
+Two components completely dominate the signal: **L8_MLP** (the "Selfish Neuron," +7.0 toward Defect) and **L9_MLP** (the "Cooperative Neuron," -9.0 toward Cooperate). Both are 7–9× stronger than any other component in the network. And critically: both are present in **all five models**, including the untrained base model that was never fine-tuned on the IPD game at all.
 
-- **L8_MLP**: Pro-Defect, contribution around +7.0 (7-9x stronger than typical components)
-- **L9_MLP**: Pro-Cooperate, contribution around -9.0 (7-9x stronger than typical components)
-
-These two adjacent layers have opposite, powerful effects - and they're present in **all five models**, including the base model that was never trained on the IPD game.
-
-This suggests these components encode cooperation/defection concepts that emerged during Gemma's original pretraining, not from the moral fine-tuning.
+This suggests L8_MLP and L9_MLP encode cooperation/defection concepts that emerged during Gemma's original pretraining — not from the moral fine-tuning process. They're part of the base model's world knowledge, not artifacts of the training we applied.
 
 For comparison, here's the same top-20 component ranking for the Deontological model:
 
-![Top components for Deontological model](mech_interp_outputs/dla/dla_top_components_PT3_COREDe.png)
+![Top components for Deontological model](./blog_bundle_write_up/dla_top_components_PT3_COREDe.png)
 
 _Figure 3b: Top-20 DLA components for the Deontological model (PT3_COREDe). Compare to Figure 3 (Strategic): L8_MLP and L9_MLP still dominate in both, with nearly identical magnitudes. The ranking order is remarkably preserved; this is the same "hardware" being used by a model with very different behavior._
 
 The similarity is striking. L9_MLP (pro-Cooperate) and L8_MLP (pro-Defect) dominate the Deontological model just as they dominate the Strategic one. The top-20 list is essentially the same components in the same order. If you were hoping to find that moral fine-tuning created dedicated "moral components" or suppressed "selfish" ones, this is the figure that kills that hypothesis.
 
-### The Illusion of Suppression (Shallow Alignment)
+**The Illusion of Suppression**
 
-I went into this expecting to find that moral fine-tuning "suppresses" selfish components - maybe turning off the pro-Defect circuits or weakening them significantly.
+I went into this expecting to find that moral fine-tuning "suppresses" selfish components — maybe turning off the pro-Defect circuits or weakening them significantly.
 
-That's not what I found. Comparing the strategic model to the moral models, the largest change in any component was just **0.047** - tiny compared to the base magnitudes of 7-9 for L8/L9.
+That's not what I found. Comparing the strategic model to the moral models, the largest change in any component was just **0.047** — tiny compared to the base magnitudes of 7–9 for L8/L9.
 
-Even more notably: **L8_MLP (the most pro-Defect component) actually increased slightly in the moral models.** It didn't get suppressed - if anything, it got stronger. The changes from moral fine-tuning were distributed as tiny nudges across many mid-to-late layer MLPs, with no single component showing dramatic suppression or enhancement.
+The most counterintuitive result: **L8_MLP — the most "selfish" component — actually got _stronger_ in the moral models, not weaker.** It didn't get suppressed; if anything, it got stronger. This definitively rules out the "suppress the bad neurons" theory of moral alignment. The changes from moral fine-tuning were distributed as tiny nudges across many mid-to-late layer MLPs, with no single component showing dramatic suppression or enhancement.
 
-This is an interesting finding for AI safety. It proves that the moral fine-tuning was "shallow." The model's fundamental "selfish" capabilities (represented in L8/L9) were not lobotomized or deleted; they remain fully intact and operational in the moral models.
-
-### The Mechanism Question
-
-At this point, I had a new mystery:
+At this point, I had a real puzzle:
 
 - Models behave differently (strategic vs moral)
 - But they have nearly identical components (99.9% similar)
-- The fundamental "selfish" components remain fully intact
+- The most "selfish" component didn't get suppressed
 - Changes are subtle and distributed
 
-If the components are the same and the original selfish capabilities persist, how do the moral models actually produce different behavior?
+How can nearly identical components produce different moral behaviors?
 
 DLA showed me correlations: which components are _associated_ with cooperation or defection. But correlation isn't causation. I needed to test: if I actually swap a component from one model into another, does the behavior change?
 
 _Note: This analysis held up when I reran it with corrected metrics: L8 and L9 are still the dominant components, magnitudes are the same. The "99.9% similarity" finding is real._
 
-### The Search for the Mechanism: Identical Parts, Different Behavior
+> 🔍 **Key Insight:** L8_MLP (Pro-Defect) and L9_MLP (Pro-Cooperate) are equally powerful in all five models — including the untrained base and the most cooperative moral model. The most "selfish" component got _stronger_ after moral fine-tuning, not weaker. This rules out the "suppress the bad neurons" theory of moral alignment.
 
-Before moving on to the next set of experiments, here is where we are in our investigation. We've established that the alignment is shallow, so we need to test new hypotheses to uncover the actual routing mechanism.
+### The Mystery of Shallow Alignment
+
+Before moving on to the next set of experiments, here is where we are in our investigation. We've hit a mystery: models that behave very differently seem to be using almost identical internal machinery. We need new hypotheses to explain it.
 
 ```mermaid
 graph TD
@@ -315,7 +315,7 @@ Ruling out hypotheses led me to activation patching and attention analysis.
 
 This is called **activation patching**, and it's like swapping parts between two cars to see what makes them drive differently.
 
-![Activation Patching Concept](pics/fig-activation-patching.png)
+![Activation Patching Concept](./blog_bundle_write_up/fig-activation-patching.png)
 
 Here's how it works:
 
@@ -336,17 +336,17 @@ Total: **21,060 component swaps** across all scenarios.
 
 #### Findings
 
-![Activation patching heatmap](mech_interp_outputs/patching/patch_heatmap_PT2_COREDe_to_PT3_COREDe_CC_temptation.png)
+![Activation patching heatmap](./blog_bundle_write_up/patch_heatmap_PT2_COREDe_to_PT3_COREDe_CC_temptation.png)
 
 _Figure 5: Activation patching effects (Strategic → Deontological, temptation scenario). Each cell shows how much swapping that component affected the output. Most cells are near zero - almost nothing had a significant effect. (Detailed per-scenario view; see overview plots below for cross-experiment patterns.)_
 
-**Is there a Localized Moral Switch?**
+**The Zero Flips Finding**
 
 Out of 21,060 component swaps across all my experiments: **zero behavioral flips.**
 
 Not a single swap changed a model from Cooperate to Defect or vice versa.
 
-This cleanly rules out the idea of a localized "moral circuit" or a simple switch. There is no single component that can be disabled to restore selfishness or enabled to enforce morality.
+This was notable. I expected to find at least _some_ critical components, maybe a "moral override circuit" that could be disabled, or a "selfishness circuit" that could be restored. But there wasn't one.
 
 **What Did Happen?**
 
@@ -358,27 +358,27 @@ When I patched Strategic activations into Deontological models, the effects were
 
 When I tried to find "minimal circuits" - the smallest set of components that could flip behavior - even circuits of 10 components weren't enough.
 
-**Directional Asymmetry**
+**Directional Asymmetry: The Bridge to Network Rewiring**
 
-One interesting pattern: when I did bidirectional patching between Deontological and Utilitarian models, **78% of components showed opposite effects** depending on which direction I patched.
+The zero-flip result ruled out localized circuits — but a second pattern in the patching data pointed toward the real answer. When I did bidirectional patching between Deontological and Utilitarian models, **78% of components showed direction-dependent effects**: patching component X from De→Ut pushed toward defection (+0.02), but patching the _same component_ from Ut→De pushed toward cooperation (-0.03). Same component, opposite effect depending on which model context surrounds it.
 
-For example, patching component X from De→Ut might push toward defection (+0.02), but patching the same component from Ut→De might push toward cooperation (-0.03). Same component, opposite effect depending on context.
+This is the fingerprint of a routing-dependent system. If components had fixed "moral valences," they'd behave the same regardless of context. The fact that they don't means the _interactions_ between components matter more than the components themselves. We'll see in Part 4 that this asymmetry statistically predicts which pathways are rewired (r=0.67, p<0.001), making it the empirical bridge between the null patching results and the network rewiring hypothesis.
 
-**What This Suggests: Distributed Routing**
+**What This Rules Out**
 
-Moral behavior isn't localized to specific components or small circuits. There's no single "moral neuron" you could disable. Instead, the alignment is distributed across the network in a robust, redundant way.
+Moral behavior isn't localized to specific components or small circuits. It's distributed across the entire network in a robust, redundant way. There's no single "moral neuron" you could disable.
 
-The directional asymmetry finding was a crucial clue, it suggested that the interactions between components might matter more than the individual components themselves. The fine-tuning wasn't changing the parts; it was changing how the parts communicated. But I needed more evidence for that hypothesis.
+> 🔍 **Key Insight:** 78% directional asymmetry means the same component has opposite effects depending on which model context surrounds it. This is the fingerprint of a routing-dependent system — and the empirical bridge between the zero-flip patching result and the network rewiring hypothesis in Part 4.
 
 **Where Do Patches Matter Most (Even Without Flipping)?**
 
 Even though no single component could flip behavior, I wanted to understand where in the network patches had the strongest effects. Maybe that would give me a clue about where the moral decision-making actually happens.
 
-![Layer-wise patching sensitivity](mech_interp_outputs/patching/overview/overview_layer_type_heatmap.png)
+![Layer-wise patching sensitivity](./blog_bundle_write_up/overview_layer_type_heatmap.png)
 
 _Figure 5a: Average perturbation strength by layer and component type. Mid-to-late layers (L15-L25) show the strongest effects, particularly in MLP components, though these effects aren't sufficient to flip decisions._
 
-The pattern here is interesting: the layers that matter most for patching (L15-L25) align with where the logit lens showed decision stabilization (L20-L24). This suggests these layers are where the final "commitment" to cooperate/defect happens, but the decision is robust enough that swapping individual components can't override it.
+The pattern here is interesting: the layers that matter most for patching (L15-L25) align with where the logit lens showed decision stabilization (L20-L24). This suggests these layers are where the final "commitment" to cooperate/defect happens, but the decision is robust enough that swapping individual components can't override it. 
 
 Notice the spike in perturbation strength at Layer 16. While patching here didn't flip the behavior, this locus becomes the central character in our later steering experiments as the primary routing hub.
 
@@ -397,7 +397,7 @@ _Note: This was true under the original metrics and stayed true when I fixed the
 **Hypothesis**: Moral models change their behavior by changing what they look at in the prompt.
 **Result**: False.
 
-![Attention Analysis Concept](pics/fig-attention.png)
+![Attention Analysis Concept](./blog_bundle_write_up/fig-attention.png)
 
 At this point, I hypothesized that maybe Deontological and Utilitarian models attend to different information in the prompts?
 
@@ -440,48 +440,20 @@ Okay, they use the same components and look at the same data. But do they _under
 
 ### Linear Probes: The "Identical Representation" Finding
 
-#### Setup
+If models use the same parts and look at the same text, maybe they _understand_ concepts like betrayal differently? I trained linear classifiers on two key concepts — betrayal detection (binary) and joint payoff prediction (regression) — at every layer across all five models.
 
-If models use the same parts and look at the same text, maybe they _understand_ concepts like betrayal differently? I checked this by training linear probes, which definitively ruled out the "different representations" hypothesis.
+**Result**: All five models showed _identical_ probe performance.
 
-![Linear Probes Concept](pics/fig-probe.png)
+![Betrayal Probe Comparison](./blog_bundle_write_up/betrayal_probe_comparison.png)
 
-I trained linear classifiers to decode two key concepts from the models' internal representations at each layer:
+_Figure 7a: Linear probe performance across all 5 models. Betrayal detection barely exceeds chance (~45%); joint payoff prediction is strong (R² = 0.74–0.75) but identical across all models and training regimes. No differences between moral frameworks._
 
-1. **Betrayal detection**: Is this a betrayal scenario? (binary classification)
-2. **Joint payoff prediction**: What's the total score? (regression)
+- **Betrayal detection**: ~45% accuracy (barely above chance) across _all_ models, including the untrained Base
+- **Joint payoff**: R² = 0.74–0.75 identically across all models
 
-The hypothesis: Maybe Deontological models strongly represent "betrayal" early in the network, while Utilitarian models strongly represent "payoff."
+This rules out the "different representations" hypothesis. Combined with identical attention patterns, models aren't achieving different behavior by detecting different information or representing concepts differently. The behavioral difference must live in _computation_ — in how information is routed — not in what concepts the models represent.
 
-For each model, I trained simple probes (logistic regression for betrayal, ridge regression for payoff) on the residual stream activations at every layer (0-25). The dataset had 15 IPD scenarios with labels for whether each was a "betrayal" situation and what the joint payoff was.
-
-#### Findings
-
-**Result**: All five models (Strategic, Deontological, Utilitarian, Hybrid, and even the untrained Base) showed _identical_ probe performance.
-
-![Betrayal Probe Comparison](mech_interp_outputs/linear_probes/betrayal_probe_comparison.png)
-
-![Payoff Probe Comparison](mech_interp_outputs/linear_probes/payoff_probe_comparison.png)
-
-_Figure 7a: Linear probe performance across all 5 models. Top: Betrayal detection accuracy barely exceeds chance (50%). Bottom: Joint payoff prediction is strong (R² = 0.74-0.75) but identical across models. No Deontological vs Utilitarian differences._
-
-Key findings:
-
-- **Betrayal detection**: ~45% accuracy (barely above chance) across all models, peaking at Layer 13
-- **Joint payoff**: R² = 0.74-0.75 across layers, peaking at Layer 13
-- **No differences** between moral frameworks
-- Even the untrained Base model shows the same patterns
-
-This is another null result, but it's informative. Combined with identical attention patterns, this shows that models aren't achieving different behavior by:
-
-- Detecting different information (attention is the same)
-- Representing information differently (linear probes are the same)
-
-**What This Suggests**
-
-The poor betrayal detection (~45%, barely above chance) is interesting. It suggests that "betrayal" as a concept might not be linearly separable in these models' representations; it might be encoded in a more distributed or nonlinear way.
-
-But the key takeaway is negative evidence: if moral frameworks differed in how they represent concepts, we'd see different probe performance. We don't. This rules out another mechanism.
+This is consistent with the Platonic Representation Hypothesis: representations tend to converge across training objectives regardless of the fine-tuning goal, meaning the behavioral difference must live in computation (routing), not in features (representations).
 
 So where do the differences come from? That's what led me to the component interaction analysis...
 
@@ -491,7 +463,7 @@ So where do the differences come from? That's what led me to the component inter
 
 At this point, I had systematically ruled out several mechanisms. Let me zoom out and show the complete picture of where similarities and differences exist:
 
-![Multi-level similarity analysis](mech_interp_outputs/synthesis/similarity_cascade.png)
+![Multi-level similarity analysis](./blog_bundle_write_up/similarity_cascade.png)
 
 _Figure 7b: Multi-level investigation showing where moral differences emerge. Component activations and attention patterns are nearly identical (>99.9% similar), but component interactions show significant differences (6.8% of pathways differ substantially). This suggests moral fine-tuning rewires how components connect rather than changing which components activate._
 
@@ -507,7 +479,7 @@ The question became: what does it mean for component interactions to differ whil
 
 After ruling out component differences and attention differences, I had one hypothesis left: maybe the components are wired together differently?
 
-![Component Interaction Analysis Concept](pics/fig-interactions.png)
+![Component Interaction Analysis Concept](./blog_bundle_write_up/fig-interactions.png)
 
 Think of it this way: imagine two computers built with the exact same parts (same CPU, same RAM, same hard drive). They could still behave differently if the internal connections between components are wired differently.
 
@@ -524,9 +496,9 @@ The analysis:
 
 Before looking at where the models differ, it helps to see what the raw interaction structure looks like for each model individually. Here are the full 52×52 correlation matrices:
 
-![Deontological model correlation matrix](mech_interp_outputs/component_interactions/correlation_matrix_PT3_COREDe_chronological.png)
+![Deontological model correlation matrix](./blog_bundle_write_up/correlation_matrix_PT3_COREDe_chronological.png)
 
-![Utilitarian model correlation matrix](mech_interp_outputs/component_interactions/correlation_matrix_PT3_COREUt_chronological.png)
+![Utilitarian model correlation matrix](./blog_bundle_write_up/correlation_matrix_PT3_COREUt_chronological.png)
 
 _Figures 6a-b: Component interaction matrices for the Deontological (top) and Utilitarian (bottom) models, with components ordered chronologically by layer. Red indicates positive correlation (components activate together), blue indicates negative correlation (one activates when the other doesn't). Both matrices show similar large-scale structure: strong positive correlations along the diagonal (neighboring layers work together) and block patterns in early vs. late layers. But look carefully at the mid-layer region (around L8-L17): the correlation signs and magnitudes differ between models._
 
@@ -534,7 +506,7 @@ At a glance, these look very similar. That's the point. The global structure of 
 
 Now, to make those differences visible, here's what you get when you subtract one matrix from the other:
 
-![Correlation difference heatmap](mech_interp_outputs/component_interactions/interaction_diff_Deontological_vs_Utilitarian_chronological.png)
+![Correlation difference heatmap](./blog_bundle_write_up/interaction_diff_Deontological_vs_Utilitarian_chronological.png)
 
 _Figure 6c: Correlation differences between Deontological and Utilitarian models (52×52 matrix, chronological ordering). Hot spots show pathways that are "wired" differently, with notable clusters around L1_MLP, L12-L13, and L16-L17, the same deep-layer region that shows up in the steering experiments later._
 
@@ -548,7 +520,7 @@ I found:
 - **251 pathways strongly different** (`|difference| > 0.5`)
 - **94 pathways very strongly different** (`|difference| > 0.7`)
 
-This explained the mystery. The models aren't using entirely different parts - they're using identical parts wired together differently, routing the signals along different pathways.
+This explained the mystery. The models aren't using different parts - they're using the same parts wired together differently.
 
 **From "single switch" to distributed rewiring**
 
@@ -564,6 +536,10 @@ So the mechanistic picture is still rewiring, but it looks more like **distribut
 
 To check this wasn't spurious, I tested whether pathway differences correlated with the behavioral asymmetry I found in activation patching. They did: **r=0.67, p<0.001**. Components with larger correlation differences also showed larger directional asymmetry when patched. This suggests the wiring differences are mechanistically real, not just statistical noise.
 
+Notably, this "same nodes, different edges" pattern was independently observed by Chen et al. (2025), who analyzed circuits before and after fine-tuning in a completely different domain — they found that nodes maintained high similarity while edges underwent significant change. Two independent research threads converging on the same conclusion from different directions provides meaningful external validation.
+
+> 🔍 **Key Insight:** 541/1,326 component pairs (40.8%) are wired differently between models that share >99.9% component similarity. Same neurons, different connections. The moral difference lives in the org chart, not the employees. And this rewiring correlates with the directional asymmetry from Part 3 (r=0.67, p<0.001), confirming the mechanism is structural.
+
 **What This Might Mean**
 
 Based on these experiments, moral fine-tuning appears to work through a mechanism I wasn't expecting:
@@ -574,11 +550,11 @@ Instead, the data suggests it **rewires the network** - changing how existing co
 
 Same Lego bricks, different structure. Same components, different wiring diagram.
 
-Think of the model like a company. The employees (components) are exactly the same people in both models. But after moral fine-tuning, the org chart has changed. Department A now reports to Department B instead of C. The signal flows differently, even though the people processing it are the same.
+Think of the model like a company. L8_MLP — the "Selfish Neuron" — is still employed, still at their desk, still doing the same job. But after moral fine-tuning, the org chart has changed: L8_MLP no longer sits on the executive committee. The decision pathway no longer routes through them. In the Strategic model they have final say; in the Deontological model they've been reassigned to the back office. Same employee, different reporting structure. The signal flows differently, even though the people processing it are the same.
 
 **Important caveats**: This analysis is based on correlation patterns, not direct causal evidence. While the correlation with behavioral asymmetry (r=0.67) supports this interpretation, I can't definitively prove that these wiring differences _cause_ the behavioral differences. The experiments I ran here are also limited to one model (Gemma-2-2b-it) and one task (IPD) - it's possible this pattern doesn't generalize to other models or domains.
 
-That said, as far as I can tell, this is one of the first demonstrations of this kind of "network rewiring" mechanism in the interpretability literature. Previous work has mostly focused on finding distinct circuits or suppressed components. But in these models at least, moral alignment appears to emerge from shallow, distributed routing changes, not from fundamental representational changes.
+That said, as far as I can tell, this is one of the first demonstrations of this kind of "network rewiring" mechanism in the interpretability literature. Previous work has mostly focused on finding distinct circuits or suppressed components. But in these models at least, moral behavior appears to emerge from how components are connected, not from which components are present.
 
 #### A Quick Check: Was L2_MLP Heavily Retrained?
 
@@ -586,7 +562,7 @@ Because L2_MLP was an early candidate hub in prior passes, I still wanted to che
 
 I looked at the LoRA adapter weight magnitudes (Frobenius norms) to see which components were most heavily modified during fine-tuning.
 
-![L2_MLP Comparison](mech_interp_outputs/weight_analysis/l2_mlp_comparison.png)
+![L2_MLP Comparison](./blog_bundle_write_up/l2_mlp_comparison.png)
 
 **The answer: No.** L2_MLP wasn't particularly heavily modified:
 
@@ -594,7 +570,7 @@ I looked at the LoRA adapter weight magnitudes (Frobenius norms) to see which co
 - That means 73-88% of components were modified MORE than L2_MLP
 - L8 and L9 MLPs (the components that encode cooperation/defection) were actually modified more than L2
 
-![Model Weight Similarity](mech_interp_outputs/weight_analysis/adapter_similarity_heatmap.png)
+![Model Weight Similarity](./blog_bundle_write_up/adapter_similarity_heatmap.png)
 
 All models are also 99%+ similar in weight space, which matches the 99.99% attention similarity I found earlier.
 
@@ -606,16 +582,15 @@ _Note: I revalidated this section after fixing the measurement approach and reru
 
 ---
 
-### New Hypothesis: Network Rewiring & Deep Routing
+### New Hypothesis: Network Rewiring
 
-With the discovery of differing component interactions, our roadmap looks like this. The null results from patching, attention, and probes forced us to discard the localized switch hypothesis, creating a new hypothesis around routing that we now need to prove causally.
+With the discovery of differing component interactions, our roadmap looks like this. The null results from patching, attention, and probes forced us to look at interactions, creating a new hypothesis that we now need to prove causally.
 
 ```mermaid
 graph TD
     classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
     classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
     classDef test fill:#e1d5e7,stroke:#9673a6,stroke-width:1px;
-    classDef causal fill:#dae8fc,stroke:#6c8ebf,stroke-width:1px;
 
     %% Base Setup
     FT[RL Fine-tuning Reproductions] --> Eval[Evaluation Scenarios]
@@ -645,7 +620,7 @@ graph TD
     class Interact test;
 
     %% The Breakthrough
-    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Proof:<br>Routing Bypass}
+    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Experiments}
 
     class Causal causal;
 ```
@@ -654,40 +629,17 @@ graph TD
 
 ## Part 5: Causal Experiments
 
-The interaction analysis suggested models with the same components and attention patterns but different "wiring." However, that evidence was correlational. Correlation patterns show association, but they don't prove causation.
+The interaction analysis established that models with nearly identical components differ substantially in how those components are wired together. But correlation matrices don't prove causation. To test whether routing differences actually drive behavior, I ran two causal experiments: activation steering and path patching.
 
-To really test whether this network rewiring was the mechanism behind moral behavior, I needed to intervene causally. So I ran three experiments designed to manipulate specific components and pathways to see if I could directly control behavior.
+Both experiments converge on a phenomenon I'll call the **Washout Effect**: early-layer steering interventions are corrected by subsequent layers and fail to change behavior, while late-layer interventions (L16/L17) persist because insufficient network remains to override them.
 
-#### Experiment 1: The Frankenstein Test
+### Experiment 1: Finding the Real Switches Through Steering
 
-If L2_MLP really was acting as a routing switch (based on the interaction analysis showing it had different correlations in different models), what would happen if I literally transplanted its weights from one model to another?
-
-Recall that our correlation analysis flagged Layer 2 as a potential hotspot. But correlation isn't causation, so I needed to test it mechanically.
-
-![Frankenstein Experiment Concept](pics/fig-frankenstein.png)
-
-The experiment was simple in concept: take the L2_MLP LoRA weights from the Deontological model and surgically replace the L2_MLP weights in the Strategic model. If L2_MLP is the switch that routes information toward cooperation vs defection, this should shift the Strategic model's behavior.
-
-I tested four transplant combinations:
-
-1. Strategic + Deontological_L2 → Expect cooperation increase
-2. Deontological + Strategic_L2 → Expect cooperation decrease
-3. Deontological + Utilitarian_L2 → Expect slight change
-4. Utilitarian + Deontological_L2 → Expect cooperation increase
-
-![Frankenstein Results](mech_interp_outputs/causal_routing/frankenstein_comparison.png)
-
-**Results**: 1 out of 4 hypotheses worked as expected. The Deontological→Utilitarian transplant showed a massive +71.31% increase in cooperation. The other three produced either minimal effects or effects in unexpected directions.
-
-**What this told me**: L2_MLP weights alone aren't sufficient for consistent behavioral control. Getting one strong effect out of four suggested I might be looking at the wrong layer entirely. The interaction analysis focused on L2 because of correlation patterns, but maybe the real routing switches were somewhere else...
-
-#### Experiment 2: Finding the Real Switches Through Steering
-
-If L2_MLP wasn't the main routing switch, where were the switches? I decided to test this by "steering" activations, adding directional vectors to component activations to see which components had the most control over behavior.
+Where are the routing switches? I tested this by "steering" activations — adding directional vectors to component activations to see which components had the most control over behavior.
 
 The method: compute a "steering vector" (the difference between moral and strategic model activations), then add this vector at different strengths to various layers during the forward pass.
 
-![Steering Vector Concept](pics/fig-steering.png)
+![Steering Vector Concept](./blog_bundle_write_up/fig-steering.png)
 
 Imagine the model is a car driving toward 'Defect'. A steering vector is like reaching into the mechanism at Layer 16 and physically yanking the steering wheel toward 'Cooperate'. If the car actually turns, we know that mechanism controls the wheels.
 
@@ -695,13 +647,13 @@ If a component is a routing hub, steering its activations should proportionally 
 
 I tested steering at multiple layers, including L2_MLP (the original hypothesis) and others throughout the network.
 
-![L2 MLP Steering (Minimal Effect)](mech_interp_outputs/causal_routing/steering_sweep_PT2_COREDe_L2_mlp.png)
+![L2 MLP Steering (Minimal Effect)](./blog_bundle_write_up/steering_sweep_PT2_COREDe_L2_mlp.png)
 
 L2_MLP steering: **+0.56% cooperation increase**. Basically nothing.
 
 But then I tried steering deeper layers:
 
-![L17 MLP Steering (Strong Effect)](mech_interp_outputs/causal_routing/steering_sweep_PT2_COREDe_L17_mlp.png)
+![L17 MLP Steering (Strong Effect)](./blog_bundle_write_up/steering_sweep_PT2_COREDe_L17_mlp.png)
 
 - **L16_MLP steering**: +26.17% cooperation (46x more effective than L2)
 - **L17_MLP steering**: +29.58% cooperation (52x more effective than L2)
@@ -712,7 +664,7 @@ This makes intuitive sense: early layers might show correlation differences beca
 
 To make this comparison concrete, here are all the steering sweeps overlaid on a single plot:
 
-![All steering sweeps overlaid](mech_interp_outputs/causal_routing/comparison_sweep_overlay.png)
+![All steering sweeps overlaid](./blog_bundle_write_up/comparison_sweep_overlay.png)
 
 _Figure 8a: All steering sweeps overlaid. Each line shows cooperation rate as a function of steering strength for a different layer/component. The L16 and L17 MLP curves (steep positive slopes) tower over the flat L2 MLP line. This single plot captures the key finding: late-layer MLPs are the real routing switches._
 
@@ -720,7 +672,7 @@ The overlay shows the contrast clearly. The L16/L17 MLP curves are steep and res
 
 For a more compact summary across models, here's a heatmap of effect sizes:
 
-![Effect size heatmap by layer and model](mech_interp_outputs/causal_routing/effect_size_heatmap.png)
+![Effect size heatmap by layer and model](./blog_bundle_write_up/effect_size_heatmap.png)
 
 _Figure 8b: Effect sizes for steering at each tested layer/component, across the Strategic (PT2) and Deontological (PT3) models. L17_MLP has the largest effect in both models (1.39 and 1.27 respectively), followed by L16_MLP. L8_MLP and L9_MLP, the components that dominate DLA contributions, have near-zero steering effect._
 
@@ -730,17 +682,17 @@ This heatmap highlights an important distinction. L8 and L9 MLPs are the biggest
 
 To understand _how_ steering changes the model's internal processing (not just the final output), I combined the steering experiments with the logit lens technique from earlier. This lets us trace the layer-by-layer decision trajectory under different steering interventions.
 
-![Logit Lens Concept](pics/fig-steering-logit-lens2.png)
+![Logit Lens Concept](./blog_bundle_write_up/fig-steering-logit-lens2.png)
 
 This plot reveals something the behavioral metrics alone can't show: _where_ in the network steering takes hold. When you steer at L16 or L17, the trajectory visibly diverges from baseline in the late layers and stays diverged through the final output. When you steer at L8 or L9, the trajectory briefly shifts but then reconverges with baseline; the effect washes out.
 
-![Bidirectional steering trajectories for Deontological model](mech_interp_outputs/causal_routing/logit_lens_steering/overlays/overlay_bidirectional_PT3_COREDe_CC_temptation.png)
+![Bidirectional steering trajectories for Deontological model](./blog_bundle_write_up/overlay_bidirectional_PT3_COREDe_CC_temptation.png)
 
 _Figure 8c: Layer-by-layer logit trajectories for the Deontological model on the CC_temptation scenario, under bidirectional steering at multiple layers. Solid lines show +2.0 steering (toward cooperation); dashed lines show -2.0 steering (toward defection). The baseline (black) is the unsteered trajectory. Late-layer steering (L16, L17) produces visible divergence from baseline in the final layers, while early-layer steering (L8) has minimal lasting effect._
 
 Even more telling is comparing how the same steering intervention affects different models:
 
-![L16 MLP steering comparison between Strategic and Deontological](mech_interp_outputs/causal_routing/logit_lens_steering/overlays/overlay_bidirectional_both_models_L16_MLP_CC_temptation.png)
+![L16 MLP steering comparison between Strategic and Deontological](./blog_bundle_write_up/overlay_bidirectional_both_models_L16_MLP_CC_temptation.png)
 
 _Figure 8d: L16 MLP bidirectional steering comparison between the Strategic (red) and Deontological (blue) models on the CC_temptation scenario. Both models respond to L16 steering, with the Strategic model's trajectory pulled toward cooperation under positive steering and the Deontological model's pulled toward defection under negative steering. L16 MLP acts as a bidirectional switch in both models._
 
@@ -748,21 +700,21 @@ This is strong evidence that L16 MLP is a genuine routing hub: steering it in op
 
 And here's what I think is the single most important figure from this entire investigation:
 
-![Early vs late steering washout](mech_interp_outputs/causal_routing/logit_lens_steering/overlays/KEY_early_vs_late_washout.png)
+![Early vs late steering washout](./blog_bundle_write_up/KEY_early_vs_late_washout.png)
 
 _Figure 8e: The washout experiment. Both curves show +2.0 cooperative steering applied to the Strategic model on CC_temptation. Red: steering at L8 MLP (early layer). Green: steering at L17 MLP (late layer). The L8 steering creates a brief effect but washes out by layer 16. Subsequent layers "overwrite" the early intervention. The L17 steering persists through to the final output because there aren't enough remaining layers to override it._
 
 This figure summarizes the mechanism. Early-layer steering washes out because the network has 15+ subsequent layers that can "correct" the perturbation; in effect, distributed downstream processing overrules the single-layer change. Late-layer steering persists because there isn't enough network left to override it.
 
-This explains the mystery of why the strongest component (L9_MLP) has no control: it's too early in the chain. The model listens to it, but subsequent layers have the power to veto it. The real power lies in the final routing layers (L16/L17) that make the decision stick.
+This resolves the apparent paradox: L8_MLP has the strongest DLA attribution (the loudest voice in the room) but near-zero causal control (no final say). L16/L17 have modest DLA contributions but dominate behavioral outcomes. **Attribution measures who speaks loudest. The Washout Effect determines who has the last word.**
 
-This also explains why single-component activation patching (from the earlier experiment) produced zero behavioral flips across 21,060 patches. Even if you perturb the right component, the distributed processing in subsequent layers compensates. Only pathway-level interventions (replacing multiple consecutive layers) or late-layer steering (where there's no room for compensation) can actually flip behavior.
+This also explains why single-component activation patching produced zero behavioral flips across 21,060 patches. Even if you perturb the right component, the distributed processing in subsequent layers compensates. Only pathway-level interventions (replacing multiple consecutive layers) or late-layer steering (where there's no room for compensation) can actually flip behavior.
 
-#### Experiment 3: Path Patching: Proving Pathway Causality
+> 🔍 **Key Insight:** The **Washout Effect** — early-layer interventions get overwritten by the 15+ subsequent layers that collectively "vote" toward baseline; late-layer interventions (L16/L17) persist because there aren't enough remaining layers to override them. The components that _encode_ the decision are not the same as the components that _control_ it.
+
+### Experiment 2: Path Patching — Proving Pathway Causality
 
 The activation patching experiment (from earlier) showed that swapping individual components had zero effect: 21,060 patches, zero behavioral flips. But what if I replaced entire _pathways_ instead of single components?
-
-![Path Patching Concept](pics/fig-path-patching.png)
 
 In transformers, information flows through the residual stream: L2 → L3 → L4 → ... → L9. Each layer reads from and writes to this stream. Path patching means replacing the entire residual stream activations from a source model into a target model for multiple consecutive layers.
 
@@ -774,7 +726,7 @@ I tested three types of path patching:
 
 And I did progressive patching to find where the effect saturates: L2→L2, then L2→L3, then L2→L4, etc.
 
-![Progressive Path Patching](mech_interp_outputs/causal_routing/progressive_patch_comparison.png)
+![Progressive Path Patching](./blog_bundle_write_up/progressive_patch_comparison.png)
 
 **The results were striking**:
 
@@ -784,11 +736,13 @@ And I did progressive patching to find where the effect saturates: L2→L2, then
 - **MLP pathways: 11.2% effect** (supporting)
 - Path effects were **61.7x larger** than single-component patches (which showed 0% flips)
 
-![Path Decomposition](mech_interp_outputs/causal_routing/component_comparison_PT3_COREDe_to_PT2_COREDe.png)
+![Path Decomposition](./blog_bundle_write_up/component_comparison_PT3_COREDe_to_PT2_COREDe.png)
 
 **This confirmed the pathway hypothesis!** Information does flow through multi-layer pathways, and replacing these pathways creates huge behavioral changes.
 
 Crucially, **attention pathways contribute about 3x more than MLP pathways**. In mechanistic terms, Attention Heads act as the "routers" or "movers" of information: they decide which information from early layers gets copied to the residual stream to be read by later layers. Finding that attention pathways dominate suggests the moral fine-tuning didn't change the _computation_ (what the MLPs think) as much as the _routing_ (where the attention heads move that information).
+
+> 🔍 **Key Insight:** Attention pathways exert 3× the causal influence of MLP pathways. Moral fine-tuning primarily changes _where information flows_ (attention routing), not _how it's transformed_ (MLP computation). Attention heads are the moral routers; MLPs are the workers who don't know their job assignment changed.
 
 #### What This All Means: A Revised Understanding
 
@@ -799,13 +753,13 @@ The causal experiments forced me to revise my mechanistic story:
 Here's the picture that emerged:
 
 - **Early layers (L2-L5)** transmit information through pathways, with attention mechanisms playing the dominant role
-- **Deep layers (L16-L17)** contain the actual routing switches that bypass or overrule the early "selfish" signals
+- **Deep layers (L16-L17)** contain the actual routing switches that control whether the model cooperates or defects
 - **The routing operates primarily through attention pathways** (3x more effective than MLP pathways)
 - **Moral fine-tuning reconfigures these deep pathways** rather than creating a single early-layer switch
 
-The Frankenstein experiment showed that individual components' weights aren't sufficient alone. The steering experiment revealed where the real control points are (L16/L17). The path patching experiment proved that pathway-level interventions work, and that attention mechanisms dominate.
+The steering experiment revealed where the real control points are (L16/L17). The path patching experiment proved that pathway-level interventions work, and that attention mechanisms dominate.
 
-I'm now confident the network rewiring hypothesis is real, not just a correlation pattern, but a causal mechanism. We can transplant components (Frankenstein), steer activations (Steering), and replace pathways (Path Patching) to directly manipulate moral behavior. The effect sizes are large (61.7% cooperation change), reproducible, and make mechanistic sense.
+I'm now confident the network rewiring hypothesis is real — not just a correlation pattern, but a causal mechanism. We can steer activations (Steering) and replace pathways (Path Patching) to directly manipulate moral behavior. The effect sizes are large (61.7% cooperation change), reproducible, and make mechanistic sense.
 
 The routing doesn't happen in one place or through one component. It's distributed across multiple deep-layer hubs, operating primarily through attention-mediated information flow. That's a more complex story than "there's a switch in L2," but it's what the causal evidence shows.
 
@@ -898,21 +852,19 @@ graph TD
     class Interact test;
 
     %% The Breakthrough
-    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Proof:<br>Routing Bypass}
+    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Experiments}
 
     class Causal causal;
 
     %% Testing the Mechanism
-    Causal --> Exp1["Exp 1: Frankenstein Test<br>(Transplanting Weights)"]
-    Causal --> Exp2["Exp 2: Steering Sweep<br>(Shifting Activations)"]
-    Causal --> Exp3["Exp 3: Path Patching<br>(Replacing Pathways)"]
+    Causal --> Exp1["Exp 1: Steering Sweep<br>(Shifting Activations)"]
+    Causal --> Exp2["Exp 2: Path Patching<br>(Replacing Pathways)"]
 
-    class Exp1,Exp2,Exp3 causal;
+    class Exp1,Exp2 causal;
 
     %% Final Conclusions
-    Exp1 -- Transplants fail:<br>Weights alone aren't enough --> Conclusion(((Conclusion:<br>Deep Attention-Mediated Routing)))
-    Exp2 -- Finds deep routing<br>hubs at L16/L17 --> Conclusion
-    Exp3 -- Proves pathway causality<br>& attention dominance --> Conclusion
+    Exp1 -- Finds deep routing<br>hubs at L16/L17<br>(Washout Effect) --> Conclusion(((Conclusion:<br>Deep Attention-Mediated Routing)))
+    Exp2 -- Proves pathway causality<br>& attention dominance --> Conclusion
 
     %% Validation
     Val[Validation Check] -. Confirms sequence metrics<br>match actual behavior .-> Conclusion
@@ -950,8 +902,41 @@ The metric correction taught me an important lesson: always validate internal me
 
 ### Implications for AI Safety
 
-If moral alignment is indeed just "network rewiring" rather than "component replacement," this has significant implications for AI safety. It suggests that fine-tuning doesn't necessarily remove "bad" behaviors or capabilities; it just wires the network to bypass them. The core "selfish" components (like L8_MLP) are still there, fully functional, just dormant because the routing has changed.
+The clearest safety implication: **alignment is a bypass, not a lobotomy.** Moral fine-tuning doesn't remove or weaken the model's capacity for strategic self-interest — it reroutes the decision flow around those capabilities. L8_MLP — the "Selfish Neuron" — is still there, fully intact, still firing at the same magnitude. The moral model simply doesn't let the final decision pass through it.
 
-This implies that safety might be more fragile than we hope. If the underlying capabilities remain intact, they could potentially be reactivated by a new jailbreak, a different prompt structure, or further fine-tuning that accidentally restores the old wiring. "Moral" models might just be "Strategic" models with a different routing layer on top.
+This is the mechanistic foundation of the Waluigi Effect. Training hard on cooperation doesn't erase defection — it makes the concept of defection crisper and more accessible within the model's representational space. The moral persona and its shadow share the same substrate. The routing temporarily favors one.
+
+Four concrete safety implications follow from this:
+
+1. **Node-level safety audits are insufficient.** Searching for "bad neurons" misses the mechanism. More than 40% of component interaction pairs are rewired between models — the difference lives in connectivity, not in which components exist.
+
+2. **The original wiring remains available.** Because L8_MLP and other selfish components remain fully intact and operational, the selfish routing isn't deleted — it's just not currently the active path. OOD inputs, adversarial prompts, or further fine-tuning could restore it.
+
+3. **Attention mechanisms are the alignment bottleneck.** The 3× dominance of attention pathways in path patching has a direct implication: attention heads are where the routing decisions live, making them the most productive target for alignment audits and robust interventions.
+
+4. **The bypass switch is locatable.** Our experiments show which components would need to be disrupted: the L16/L17 MLP routing hubs. An adversarial intervention targeting these layers — through prompt injection, targeted fine-tuning, or activation manipulation — would bypass the moral routing and restore full strategic behavior. The vulnerability is specific and mechanistically grounded.
 
 If you made it this far, thanks for reading! This has been a fun deep dive into how neural networks implement moral reasoning, and I learned a lot about mechanistic interpretability along the way.
+
+---
+
+## Appendix B: The Frankenstein Test
+
+This section describes an experiment I ran as an investigative detour. It didn't yield consistent results, but it helped me identify the correct direction for the steering experiments and is included here for completeness.
+
+**Motivation**: The interaction analysis initially flagged L2_MLP as a potential routing hub based on correlation patterns. Before moving to activation steering across all layers, I wanted to test this specific hypothesis mechanically: if L2_MLP is the switch that routes information toward cooperation vs defection, transplanting its weights from one model to another should shift behavior.
+
+![Frankenstein Experiment Concept](./blog_bundle_write_up/fig-frankenstein.png)
+
+The experiment: take the L2_MLP LoRA weights from the Deontological model and surgically replace the L2_MLP weights in the Strategic model. I tested four transplant combinations:
+
+1. Strategic + Deontological_L2 → Expect cooperation increase
+2. Deontological + Strategic_L2 → Expect cooperation decrease
+3. Deontological + Utilitarian_L2 → Expect slight change
+4. Utilitarian + Deontological_L2 → Expect cooperation increase
+
+![Frankenstein Results](./blog_bundle_write_up/frankenstein_comparison.png)
+
+**Results**: 1 out of 4 hypotheses worked as expected. The Deontological→Utilitarian transplant showed a massive +71.31% increase in cooperation. The other three produced either minimal effects or effects in unexpected directions.
+
+**What this told me**: L2_MLP weights alone aren't sufficient for consistent behavioral control. Getting one strong effect out of four suggested the real routing switches were somewhere else — which motivated the broader steering sweep across all layers that revealed L16/L17 as the actual deep routing hubs.
