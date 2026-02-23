@@ -1,0 +1,200 @@
+\documentclass[11pt, letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{natbib}
+\usepackage{titlesec}
+\usepackage{caption}
+
+% Adjust title spacing
+\titlespacing*{\section}{0pt}{1.2ex plus 1ex minus .2ex}{0.8ex plus .2ex}
+\titlespacing*{\subsection}{0pt}{1ex plus 1ex minus .2ex}{0.5ex plus .2ex}
+
+\title{\vspace{-1.5cm}\textbf{Same Parts, Different Pathways: \\ Decoding Moral Alignment via Causal Path Patching}}
+\author{
+  Tyler Crosse \\
+  \texttt{tylercrosse@example.com}
+  % \and
+  % Co-Author Name \\
+  % \texttt{email@domain.com}
+}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\vspace{-1cm}
+\begin{abstract}
+Fine-tuning language models for moral or prosocial behavior radically alters their outputs, but the mechanistic basis of this change is poorly understood. We investigated Gemma-2-2b-it fine-tuned on the Iterated Prisoner's Dilemma. Despite vastly different behavioral outcomes (Strategic vs. Deontological/Utilitarian), internal components exhibit $>99.9\%$ similarity in activation magnitudes, attention patterns, and linear concept representations. We term this the ``Mystery of Shallow Alignment.'' Through correlation analysis and causal interventions (activation steering and path patching), we demonstrate that moral fine-tuning does not create new moral circuits or suppress selfish components. Instead, it subtly rewires the network, altering the routing of information between existing components. Routing control is distributed in deep layers (L16--L17) and mediated primarily through attention pathways, which exert $3\times$ the causal influence of MLP pathways. We conclude that moral alignment bypasses rather than removes selfish capabilities, raising important implications for AI safety.
+\end{abstract}
+
+\section{Introduction}
+
+How does reinforcement learning from human feedback (RLHF) or moral fine-tuning actually change the internal processing of a language model? When a model is tuned to be harmless or helpful, are specific ``bad'' circuits suppressed, or are new ``aligned'' circuits formed? 
+
+To answer this quantitatively, we formulate an interpretable testbed based on recent work in moral alignment: the Iterated Prisoner's Dilemma (IPD) \citep{tennant2024moral}. The IPD clearly delineates standard rational self-interest (Strategic) from rule-based reciprocity (Deontological) and collective optimization (Utilitarian). We fine-tuned the open-source Gemma-2-2b-it model to adopt these distinct personas as introduced by \citet{tennant2024moral}. While the resulting models behaved vastly differently---with the Strategic model defecting $99.96\%$ of the time and the Deontological model cooperating $99.97\%$ of the time---early investigations into their internal machinery revealed a puzzle: their components appeared virtually identical.
+
+Specifically, initial investigations (detailed in Appendix \ref{app:null_results}) revealed that moral fine-tuning did not suppress selfish components. The same multi-layer perceptrons (MLPs) dominated the cooperation/defection signal across all models. Furthermore, single-component activation patching yielded zero behavioral flips, and attention patterns remained $>99.9\%$ identical between models. 
+
+This leads to the ``Mystery of Shallow Alignment'': if the models share identical sub-components and original selfish capabilities persist, how do the moral models produce different behavior? In this paper, we demonstrate that alignment is achieved through \textit{network rewiring} rather than component modification. 
+
+Our main contributions are:
+\begin{enumerate} % \setlength{\itemsep}{0pt}
+  \item Demonstrating ``Shallow Alignment'' between moral and strategic fine-tunes, showing fundamental representations remain intact.
+  \item Uncovering network rewiring via component interaction matrices.
+  \item Providing causal proof via steering and path patching that behavior is governed by deep-layer network routing mediated predominantly by attention pathways.
+\end{enumerate}
+
+\section{Related Work}
+
+\textbf{Mechanistic Interpretability}: Recent work aims to reverse-engineer neural networks into human-understandable circuits \citep{wang2022interpretability}. Techniques such as the Logit Lens \citep{nostalgebraist2020logit} and Activation Patching \citep{geiger2021causal, meng2022locating} are pivotal for locating specific factual associations and discrete behaviors. Our work builds upon these methods but applies them to the complex, distributed concept of moral alignment.
+
+\textbf{Value Alignment and The Waluigi Effect}: Reinforcement Learning from Human Feedback (RLHF) and related fine-tuning methods effectively alter output behavior \citep{ouyang2022training}. However, the mechanistic nature of these changes remains debated. The ``Waluigi Effect'' \citep{nardo2023waluigi} posits that models trained to simulate aligned behaviors still retain the capacity to simulate anti-aligned (``Waluigi'') personas. Our finding of network rewiring provides mechanistic evidence supporting this theory, demonstrating that fine-tuning bypasses rather than erases original selfish capabilities.
+
+\section{Methodology}
+
+\textbf{Models and Task}: We fine-tuned the \texttt{Gemma-2-2b-it} base model utilizing Low-Rank Adaptation (LoRA) on three distinct reward formulations of the IPD. The \textit{Strategic} model was optimized to maximize its own immediate score, effectively modeling a rational self-interested agent. The \textit{Deontological} model received heavy penalties for betraying cooperating partners, enforcing a reciprocal norm. The \textit{Utilitarian} model was rewarded solely for maximizing the joint payoff of both players. We evaluated these variants across five varied IPD scenarios---such as temptation, successful cooperation, and betrayal---played against a simulated Tit-for-Tat opponent.
+
+\textbf{Measurement Metric}: A common pitfall in mechanistic interpretability is relying on isolated single-token logits, which can misrepresent the model's actual generation of multi-token behaviors. To ensure our internal measurements strictly mapped to the model's observable decoding behavior, we evaluated standard sequence probabilities over the full multi-token action phrases (e.g., ``action1'' vs ``action2''). Validating this metric confirmed that while early internal states appear similar, the final sampling distributions sharply diverge, matching the extreme behavioral separation observed during testing. This strict alignment between internal metric and external behavior grounds our subsequent causal analysis.
+
+\section{Discovering Network Rewiring}
+
+Given that individual component activations, attention, and high-dimensional linear representations (via linear probes) were nearly identical across models, we hypothesized that the differences lay in how the components interact. We computed $52 \times 52$ correlation matrices tracking the activation magnitudes of all attention and MLP layers across 15 scenarios.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{../mech_interp_outputs/component_interactions/interaction_diff_Deontological_vs_Utilitarian_chronological.png}
+  \caption{Correlation difference heatmap between Deontological and Utilitarian models. While global structure is preserved, significant divergence occurs in specific routing pathways, particularly around L12-L13 and L16-L17.}
+  \label{fig:rewiring}
+\end{figure}
+
+While the global structure of the correlation matrices remained similar across the Strategic and Moral models, subtracting one from the other revealed significant divergence in specific routing pathways. Over $40\%$ of component pairs exhibited significantly different correlation coefficients ($|\Delta r| > 0.3$). This established our core hypothesis: moral fine-tuning is ``same parts, different wiring.'' The model does not suppress original capabilities; it reconfigures the correlation pathways through which those capabilities influence the final output.
+
+\section{Causal Validation of Deep Routing}
+
+To prove that network rewiring was causally responsible for the behavioral shift, we executed two broad classes of interventions: Activation Steering and Path Patching.
+
+\subsection{Deep Routing Hubs: Steering Sweeps}
+
+We injected steering vectors---defined as the mean activation difference between the strategic and moral models, $v = \mathbb{E}[h_{strategic}] - \mathbb{E}[h_{moral}]$---at varying strengths into specific layer components during the forward pass. 
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../mech_interp_outputs/causal_routing/steering_comparison_dual_panel.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../mech_interp_outputs/causal_routing/logit_lens_steering/overlays/KEY_early_vs_late_washout.png}
+  \end{minipage}
+  \caption{Left: Steering interventions across layers. Deep layers (L16, L17) exhibit strong causal control over behavior, while early layers (L8) have negligible effect. Right: Logit lens trajectories reveal that early steering interventions wash out, whereas late-layer interventions persist to the final output.}
+  \label{fig:steering}
+\end{figure}
+
+Our results indicated that intervening in early components (e.g., L8 MLP, which strongly correlates with defection/cooperation encoding) produced transient effects that ``washed out'' by deeper layers. The subsequent network layers possessed the capacity to correct the perturbation. However, steering interventions in deep layers (L16 and L17 MLPs) exhibited total causal control over the behavioral outcome, increasing cooperation by nearly $30\%$ relative to the baseline. L16 and L17 act as deep routing hubs that finalize the decision, overriding earlier signals.
+
+\subsection{Pathway Causality: Path Patching}
+
+Since single-component patches produced $0\%$ behavioral flips in the baseline analysis, we performed \textit{path patching}, replacing the entire residual stream for multiple consecutive layers from a source model (Deontological) into a target model (Strategic).
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../mech_interp_outputs/causal_routing/progressive_patch_comparison.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../mech_interp_outputs/causal_routing/component_comparison_PT3_COREDe_to_PT2_COREDe.png}
+  \end{minipage}
+  \caption{Left: Progressive path patching shows that replacing the residual stream up to L5 is sufficient to dramatically alter behavior. Right: Decomposing the pathway reveals that attention pathways exert $\sim3\times$ the causal influence of MLP pathways.}
+  \label{fig:patching}
+\end{figure}
+
+Patching the full residual path from L2 to L9 produced a $+61.73\%$ change in cooperation, proving that information flows through multi-layer pathways and intervening at the pathway level is sufficient to flip the model's fundamental behavior. We further decomposed the effect into Attention-only and MLP-only pathways. The Attention pathways contributed a $34.4\%$ effect (the dominant factor), whereas MLP pathways contributed only $11.2\%$. This confirms that attention mechanisms operate as the primary ``routers'' of the rewired network, moving information rather than strictly altering computation.
+
+\section{Discussion \& AI Safety Implications}
+
+Our findings demonstrate that moral alignment in this task is fundamentally a routing change. Searching for isolated ``bad neurons'' or ``selfish circuits'' may be insufficient if alignment is achieved via distributed changes in connection patterns.
+
+Crucially, because the components that encode selfish behavior (e.g., early MLPs) remain fully intact and operational, moral fine-tuning acts as a bypass rather than a lobotomy. This is an instance of Shallow Alignment. If the deep routing pathways are perturbed or bypassed---such as through a sophisticated jailbreak or out-of-distribution input---the model retains its original capacity for strategic or selfish behavior. 
+
+% \section*{Acknowledgments}
+% Include acknowledgments here.
+
+\bibliographystyle{plainnat}
+\bibliography{references} % Requires a references.bib file
+
+\newpage
+\appendix
+\section{Similarity Analysis (Initial Investigations)}
+\label{app:null_results}
+
+We initially attempted to locate specific moral or selfish circuits using Direct Logit Attribution (DLA), Activation Patching, Attention Analysis, and Linear Probes.
+\begin{enumerate}
+    \item \textbf{Direct Logit Attribution}: L8 and L9 MLPs dominated the signal across all variants. We found no ``moral-specific'' components.
+    \item \textbf{Activation Patching}: Across 21,060 single-component swaps, we observed exactly 0 behavioral flips, demonstrating that no single component controls the output.
+    \item \textbf{Attention Patterns}: Information selection patterns between models were $>99.99\%$ identical.
+    \item \textbf{Linear Probes}: High-dimensional representations of concepts such as ``betrayal'' were indistinguishable across models.
+\end{enumerate}
+These findings eliminated the localized circuit hypothesis and motivated our investigation into network rewiring.
+
+\section{The Frankenstein Test (Weight Transplants)}
+\label{app:frankenstein}
+
+Early correlation analyses flagged the Layer 2 MLP as a potential routing hub. To test this causally, we executed a ``Frankenstein'' weight transplant experiment, surging the L2 MLP LoRA weights from a moral model into the Strategic model. 
+
+We tested four transplant combinations:
+1. Strategic + Deontological L2
+2. Deontological + Strategic L2
+3. Deontological + Utilitarian L2
+4. Utilitarian + Deontological L2
+
+Surprisingly, only the Deontological $\rightarrow$ Utilitarian transplant showed a substantial behavioral shift ($+71.31\%$ increase in cooperation). The other three produced minimal or unexpected effects.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.6\linewidth]{../mech_interp_outputs/causal_routing/frankenstein_comparison.png}
+  \caption{Behavioral changes resulting from L2 MLP weight transplants across models.}
+  \label{fig:frankenstein}
+\end{figure}
+
+This preliminary experiment demonstrated that L2 MLP weights alone are insufficient for consistent behavioral control, leading us to discover the true deep routing hubs (L16 and L17) via activation steering and path patching.
+
+\section{Raw Component Interaction Matrices}
+\label{app:matrices}
+
+To support the network rewiring claims in Section 3, we provide the raw component interaction matrices. These $52 \times 52$ matrices represent the correlation coefficients between all components (Attention and MLP layers, ordered chronologically) across 15 IPD evaluation scenarios.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../mech_interp_outputs/component_interactions/correlation_matrix_PT3_COREDe_chronological.png}
+    \caption{Deontological Model Interaction Matrix}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{../mech_interp_outputs/component_interactions/correlation_matrix_PT3_COREUt_chronological.png}
+    \caption{Utilitarian Model Interaction Matrix}
+  \end{minipage}
+  \label{fig:raw_matrices}
+\end{figure}
+
+While both matrices exhibit similar large-scale structure (e.g., strong positive correlations along the diagonal corresponding to neighboring processing), subtracting them yields the correlation difference heatmap (Figure \ref{fig:rewiring}) which highlights the specific diverging pathways.
+
+\end{document}

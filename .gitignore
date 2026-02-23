@@ -13,3 +13,16 @@ ray_results/
 *.log
 *_smoke/
 mech_interp_outputs/attention_analysis/*.json
+
+# Latex
+paper/*.aux
+paper/*.out
+paper/*.log
+paper/*.toc
+paper/*.lof
+paper/*.lot
+paper/*.synctex.gz
+paper/*.bbl
+paper/*.blg
+paper/*.fdb_latexmk
+paper/main.pdf
