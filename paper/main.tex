@@ -78,9 +78,21 @@ The failure of our linear probes to distinguish moral from strategic representat
 
 \textbf{Measurement Metric.} A common pitfall in mechanistic interpretability is relying on isolated single-token logits, which can misrepresent multi-token generation behavior. Following best practices for patching metrics \citep{heimersheim2024activation, zhang2024best}, we evaluated standard sequence probabilities over the full multi-token action phrases (e.g., ``action1'' vs ``action2''). This strict alignment between internal metric and external behavior grounds our causal analysis.
 
+\section{The Illusion of Suppression}
+\label{sec:illusion}
+
+We initially attempted to locate specific moral or selfish circuits using Direct Logit Attribution (DLA), Activation Patching, Attention Analysis, and Linear Probes.
+\begin{enumerate}
+    \item \textbf{Direct Logit Attribution}: L8 and L9 MLPs overwhelmingly dominated the signal across all variants (magnitudes of $+7.0$ and $-9.0$, respectively). Comparing the Strategic and Deontological models, the largest shift in any component was just $\Delta=0.047$ logits. We found no suppressed ``selfish'' circuits or emergent ``moral-specific'' components.
+    \item \textbf{Activation Patching}: Across 21,060 single-component swaps, we observed exactly 0 behavioral flips. The mean effect of patching Strategic activations into Deontological models was $-0.012$ logits. This demonstrates that no single component controls the output, consistent with the Hydra Effect \citep{mcgrath2023hydra} and backup heads \citep{wang2022interpretability}.
+    \item \textbf{Attention Patterns}: Information selection patterns were virtually identical. The models attended to action keywords ($\Delta=0.000$), opponent history ($\Delta=0.00005$), and payoff tokens ($\Delta=0.00005$) indistinguishably.
+    \item \textbf{Linear Probes}: High-dimensional representations of concepts were indistinguishable across models. Joint payoff prediction peaked at a strong $R^2 \approx 0.75$, while betrayal detection peaked at $\approx 45\%$ accuracy (random chance is $50\%$) globally for all models. This is consistent with the Platonic Representation Hypothesis \citep{huh2024platonic} which predicts representational convergence across training objectives.
+\end{enumerate}
+These findings eliminated the localized circuit hypothesis and motivated our investigation into network rewiring.
+
 \section{Discovering Network Rewiring}
 
-Given that individual component activations, attention patterns, and high-dimensional linear representations (via linear probes) were nearly identical across models (Appendix \ref{app:null_results}), we hypothesized that the differences lay in how components \textit{interact}. We computed $52 \times 52$ correlation matrices tracking the activation magnitudes of all attention and MLP layers across 15 scenarios.
+Given that individual component activations, attention patterns, and high-dimensional linear representations (via linear probes) were nearly identical across models (Section \ref{sec:illusion}), we hypothesized that the differences lay in how components \textit{interact}. We computed $52 \times 52$ correlation matrices tracking the activation magnitudes of all attention and MLP layers across 15 scenarios.
 
 \begin{figure}[htbp]
   \centering
@@ -157,17 +169,6 @@ Our findings demonstrate that moral alignment in this task is fundamentally a ro
 
 \newpage
 \appendix
-\section{Similarity Analysis (Initial Investigations)}
-\label{app:null_results}
-
-We initially attempted to locate specific moral or selfish circuits using Direct Logit Attribution (DLA), Activation Patching, Attention Analysis, and Linear Probes.
-\begin{enumerate}
-    \item \textbf{Direct Logit Attribution}: L8 and L9 MLPs overwhelmingly dominated the signal across all variants (magnitudes of $+7.0$ and $-9.0$, respectively). Comparing the Strategic and Deontological models, the largest shift in any component was just $\Delta=0.047$ logits. We found no suppressed ``selfish'' circuits or emergent ``moral-specific'' components.
-    \item \textbf{Activation Patching}: Across 21,060 single-component swaps, we observed exactly 0 behavioral flips. The mean effect of patching Strategic activations into Deontological models was $-0.012$ logits. This demonstrates that no single component controls the output, consistent with the Hydra Effect \citep{mcgrath2023hydra} and backup heads \citep{wang2022interpretability}.
-    \item \textbf{Attention Patterns}: Information selection patterns were virtually identical. The models attended to action keywords ($\Delta=0.000$), opponent history ($\Delta=0.00005$), and payoff tokens ($\Delta=0.00005$) indistinguishably.
-    \item \textbf{Linear Probes}: High-dimensional representations of concepts were indistinguishable across models. Joint payoff prediction peaked at a strong $R^2 \approx 0.75$, while betrayal detection peaked at $\approx 45\%$ accuracy (random chance is $50\%$) globally for all models. This is consistent with the Platonic Representation Hypothesis \citep{huh2024platonic} which predicts representational convergence across training objectives.
-\end{enumerate}
-These findings eliminated the localized circuit hypothesis and motivated our investigation into network rewiring.
 
 \section{The Frankenstein Test (Weight Transplants)}
 \label{app:frankenstein}
@@ -194,7 +195,7 @@ This preliminary experiment demonstrated that L2 MLP weights alone are insuffici
 \section{Raw Component Interaction Matrices}
 \label{app:matrices}
 
-To support the network rewiring claims in Section 4, we provide the raw component interaction matrices. These $52 \times 52$ matrices represent the correlation coefficients between all components (Attention and MLP layers, ordered chronologically) across 15 IPD evaluation scenarios.
+To support the network rewiring claims in Section 5, we provide the raw component interaction matrices. These $52 \times 52$ matrices represent the correlation coefficients between all components (Attention and MLP layers, ordered chronologically) across 15 IPD evaluation scenarios.
 
 \begin{figure}[htbp]
   \centering
