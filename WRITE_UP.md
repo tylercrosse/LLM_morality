@@ -57,7 +57,7 @@ graph TD
     FT[Part 1: Fine-tuning & Evaluation] --> Mystery{Part 2: The Mystery of Shallow Alignment:<br>Different Behaviors,<br>Nearly Identical Components}
     Mystery --> Tests[Part 3: Ruling out Localized Circuits:<br>Attention & Probes]
     Tests --> Breakthrough[Part 4: The Breakthrough:<br>Component Interactions]
-    Breakthrough --> Mech[Part 5: Causal Proof:<br>Network Rewiring & Deep Routing]
+    Breakthrough --> Mech[Part 5: Causal Tests:<br>Network Rewiring & Deep Routing]
 
     class FT setup;
     class Mystery feature;
@@ -110,7 +110,7 @@ When you look at the numbers, the models showed dramatically different behavior 
 
 (Initially I thought the models were much more similar because I was measuring with single-token logits; see the methodology note above for the full story on that.)
 
-This raised a question: if the models behave so differently, what's actually different internally? Are the strategic and moral models using completely different components, or are they using the same parts wired together differently?
+This raised a question: if the models behave so differently, what's actually different internally? Are the strategic and moral models using completely different components, or are they using the same parts with different effective routing between them?
 
 To answer that, I used mechanistic interpretability to inspect internal computation directly.
 
@@ -362,13 +362,13 @@ _Note: This was true under the original metrics and stayed true when I fixed the
 
 ### Attention Pattern Analysis: Testing Information Selection
 
-<!-- TODO: Blocker - Resolve contradiction between identical attention patterns here and attention pathways dominating routing in Part 5. Explicitly distinguish between attention *weights* (which tokens it looks at, which are identical) and attention *values/outputs* (what vectors are moved to the residual stream, which must be changing). -->
 ![Attention Analysis Concept](./blog_bundle_write_up/fig-attention.png)
 
-If this were true, I'd expect to see different attention patterns: Deontological models focusing on "opponent's previous action" tokens, Utilitarian models focusing on payoff numbers. I measured attention weights across three token categories: action keywords, opponent action context, and payoff information.
+If this were true, I'd expect to see different attention patterns: Deontological models focusing on "opponent's previous action" tokens, Utilitarian models focusing on payoff numbers. I measured final-token attention **weights** aggregated across layers/heads and grouped into three coarse token categories: action keywords, opponent action context, and payoff information.
 
-The result was **99.99% identical**. The largest difference between any two models on any token category was 0.00005, effectively noise. Both moral frameworks attend to the same information, with nearly identical emphasis. That leaves processing differences, not information selection, as the likely source of behavioral divergence.
-<!-- TODO: Major - Add scope limits. This measures attention weights over three coarse token categories; finer head-level, position-level, or value-vector differences may still matter. -->
+The result was **99.99% identical** at this coarse level. In the saved comparison table, the largest category-level gap is still below 0.001 (max absolute payoff-category difference is about 0.00064), effectively tiny relative to total attention mass. Both moral frameworks attend to the same broad information. 
+
+This measurement is intentionally narrow: it captures **where** the final decision token looks, not **what vectors** are transmitted by attention outputs. So it cannot rule out differences in attention value transport (`hook_attn_out`) or finer head/position-level structure.
 
 At that point, components and attention looked nearly identical. The next check was whether internal representations, like betrayal, differed across models. That led me to linear probes.
 
@@ -434,24 +434,21 @@ graph TD
 
 #### Setup
 
-After ruling out component differences and attention differences, I had one hypothesis left: maybe the components are wired together differently?
+After ruling out component differences and coarse attention-weight differences, I had one hypothesis left: maybe the components keep the same inventory but differ in effective interaction structure?
 
 ![Component Interaction Analysis Concept](./blog_bundle_write_up/fig-interactions.png)
 
 <!-- TODO: Minor - Trim component interaction analogy ("imagine two computers built with the exact same parts..."). -->
-<!-- TODO: Blocker - "Wiring" metaphor is overloaded. Transformers have fixed wiring; LoRA weights just shift activation vectors to alter downstream dot products. Replace "wired differently" with "different effective routing" or "different correlation structures". -->
-Think of it this way: imagine two computers built with the exact same parts (same CPU, same RAM, same hard drive). They could still behave differently if the internal connections between components are wired differently.
+Think of it this way: two systems can use the same parts but produce different behavior if signal flow between those parts changes in practice.
 
-<!-- TODO: Blocker - Specify correlation method. Pearson? Spearman? With only 15 data points (scenarios), the statistical power is low -- correlation thresholds of 0.3/0.5/0.7 need explicit justification. This is the weakest methodological link and the most important to nail since the "network rewiring" claim rests on it. -->
-I measured **component interactions** by looking at correlation patterns. If two components' activations tend to go up and down together across different scenarios, they're "connected" - they work together as part of the same processing pathway.
+I measured **component interactions** by correlating component activation magnitudes across the 15 evaluation prompts. In code this uses **Pearson correlation** by default (`mech_interp/component_interactions.py`). With only `n=15` prompts, I treat threshold counts as effect-size bins, not formal significance tests.
 
 The analysis:
 
 - Track activation magnitudes for all 52 components (26 attention layers + 26 MLP layers)
-- Compute how each component correlates with every other component across 15 scenarios
+- Compute Pearson correlation for every component pair across 15 scenarios
 - Compare these correlation patterns between Deontological and Utilitarian models
-<!-- TODO: Major - Replace "significantly different" language unless statistical testing + multiple-comparison correction is shown. If thresholded only, call them "large differences by threshold (|diff| > 0.3)". -->
-- Identify pathways where correlations differ significantly (|difference| > 0.3)
+- Bin pathway differences by absolute correlation shift: `|Δr| >= 0.3`, `0.5`, `0.7`
 
 #### Findings
 
@@ -464,18 +461,19 @@ Before looking at where the models differ, it helps to see what the raw interact
 
 _Figures 6a-b: Component interaction matrices for the Deontological (top) and Utilitarian (bottom) models, with components ordered chronologically by layer. Red indicates positive correlation (components activate together), blue indicates negative correlation (one activates when the other doesn't). Both matrices show similar large-scale structure: strong positive correlations along the diagonal (neighboring layers work together) and block patterns in early vs. late layers. But look carefully at the mid-layer region (around L8-L17): the correlation signs and magnitudes differ between models._
 
-At a glance, these look very similar. That's the point. The global structure of component interactions is preserved: both models have similar block-diagonal patterns, similar early-layer clusters, similar late-layer clusters. The differences are subtle and distributed, which is exactly what you'd expect from "same components, different wiring."
+At a glance, these look very similar. That's the point. The global structure of component interactions is preserved: both models have similar block-diagonal patterns, similar early-layer clusters, similar late-layer clusters. The differences are subtle and distributed, which is exactly what you'd expect from "same components, different effective routing."
 
 Now, to make those differences visible, here's what you get when you subtract one matrix from the other:
 
 ![Correlation difference heatmap](./blog_bundle_write_up/interaction_diff_Deontological_vs_Utilitarian_chronological.png)
 
-_Figure 6c: Correlation differences between Deontological and Utilitarian models (52×52 matrix, chronological ordering). Hot spots show pathways that are "wired" differently, with notable clusters around L1_MLP, L12-L13, and L16-L17, the same deep-layer region that shows up in the steering experiments later._
+_Figure 6c: Correlation differences between Deontological and Utilitarian models (52×52 matrix, chronological ordering). Hot spots show pathways with different effective interaction structure, with notable clusters around L1_MLP, L12-L13, and L16-L17, the same deep-layer region that shows up in the steering experiments later._
 
-<!-- TODO: Major - Replace "Network Rewiring" metaphor with technically precise terms like "effective routing" or "correlation pathways". -->
 #### The Discovery: Network Rewiring
 
-While the models' components were more than 99.9999% identical and their attention patterns were practically unchanged, their component interactions showed a broad, non-trivial divergence. Out of 1,326 total component pairs, 541 pathways (about 40.8%) were significantly different (an absolute difference greater than 0.3). Within that group, 251 pathways were strongly different (greater than 0.5) and 94 were very strongly different (greater than 0.7). This finally explained our mystery: the models aren't using different parts; they are using the same parts wired together differently. 
+In this post, **"network rewiring" means changed effective routing/interaction structure, not literal topology changes**. The models' components are still >99.9999% similar and coarse attention-weight patterns are nearly unchanged, but their interaction patterns diverge broadly. Out of 1,326 component pairs, Pearson `|Δr|` counts are 541 (`>=0.3`), 251 (`>=0.5`), and 94 (`>=0.7`), indicating widespread medium-to-large effect-size shifts.
+
+As a method-sensitivity check using the same saved activations, Spearman gives similar totals: 565 (`>=0.3`), 273 (`>=0.5`), and 103 (`>=0.7`). Given the small prompt set (`n=15`), I interpret this as robust correlational evidence for distributed interaction changes in this setting, not as definitive mechanism proof.
 <!-- TODO: Major - Tone/calibration: "This finally explained our mystery" is too strong. Rephrase as "best-supported working explanation in this model-task setting." -->
 
 An earlier, less refined version of this analysis suggested that early layers (specifically L2_MLP) might act as a singular routing switch. However, the updated interaction tables weakened that claim considerably. The connection between L2_MLP and L9_MLP turned out to be relatively weak (a rank around 858 out of 1326). Instead, the largest differences were distributed deeply across the network, dominated by connections like L16_MLP to L1_MLP, and L19_ATTN to both L21_MLP and L24_MLP. The mechanistic picture that emerged wasn't a single, decisive early-layer switch, but a **distributed network-level reconfiguration** organized around recurring hubs like L19_ATTN, L1_MLP, and L17_MLP.
@@ -484,7 +482,7 @@ To ensure this sprawling rewiring wasn't just statistical noise, I cross-referen
 This "same nodes, different edges" pattern also mirrors recent independent findings by Chen et al. (2025), who observed a remarkably similar phenomenon where fine-tuning altered network edges while leaving the nodes highly similar. Finding two independent research threads converging on the same conclusion provides a strong vote of external validation.
 
 <!-- TODO: Minor - Redundancy. This paragraph restates the r=0.67 stat from the paragraph above it and the "same parts, different wiring" metaphor for ~the 4th time. Cut or merge into the paragraph above. -->
-Over 40% of component pairs are wired differently between models that otherwise share near-identical components. The moral difference appears in connectivity ("org chart"), not inventory ("employees"). This rewiring also correlates strongly with the directional asymmetry from Part 3 (r=0.67, p<0.001), which supports a structural mechanism.
+Over 40% of component pairs show large (`|Δr| >= 0.3`) interaction shifts between models that otherwise share near-identical components. The moral difference appears in effective routing ("org chart"), not inventory ("employees"). This interaction-shift signal also correlates strongly with the directional asymmetry from Part 3 (r=0.67, p<0.001), which supports a structural mechanism.
 
 Based on these experiments, moral fine-tuning appears to work through a mechanism I wasn't initially expecting. It doesn't create new "moral" components, it doesn't suppress "selfish" ones, and it doesn't even change the information the model chooses to look at. Instead, the training simply re-routes how existing components pass information to one another. Same Lego bricks, different wiring diagram. 
 
@@ -496,7 +494,7 @@ Even with those caveats, this is strong evidence for a "network rewiring" mechan
 
 ### New Hypothesis: Network Rewiring
 
-With the discovery of differing component interactions, our roadmap looks like this. The null results from patching, attention, and probes forced us to look at interactions, creating a new hypothesis that we now need to prove causally.
+With the discovery of differing component interactions, our roadmap looks like this. The null results from patching, attention, and probes forced us to look at interactions, creating a new hypothesis that we now need to test with causal interventions.
 <!-- TODO: Minor - Concision pass. This is another full roadmap diagram; keep one canonical roadmap and convert repeated ones into short transition text. -->
 
 ```mermaid
@@ -542,7 +540,7 @@ graph TD
 
 ## Part 5: Causal Experiments
 
-The interaction analysis established that models with nearly identical components differ substantially in how those components are wired together. But correlation matrices don't prove causation. To test whether routing differences actually drive behavior, I ran two causal experiments: activation steering and path patching.
+The interaction analysis established that models with nearly identical components differ substantially in interaction structure. But correlation matrices don't prove causation. To test whether routing differences actually drive behavior, I ran two causal experiments: activation steering and path patching.
 
 Both experiments converge on a phenomenon I'll call the **Washout Effect**: early-layer steering interventions are corrected by subsequent layers and fail to change behavior, while late-layer interventions (L16/L17) persist because insufficient network remains to override them.
 
@@ -629,13 +627,16 @@ This also explains why single-component activation patching produced zero behavi
 
 The **Washout Effect** is simple: early-layer interventions are overwritten by many downstream layers, while late-layer interventions (L16/L17) persist because too little network remains to cancel them. Components that encode signals are not always the components that control outcomes.
 
-<!-- TODO: Blocker - Rename to "Testing Pathway-Level Causality" and explicitly state scope limits (tested paths/layers/task), not global proof. -->
-### Experiment 2: Path Patching: Proving Pathway Causality
+### Experiment 2: Path Patching: Testing Pathway-Level Causality
 
 <!-- TODO: Major - Clarify what's being replaced. Are you replacing full residual stream values (attention + MLP outputs accumulated), or just MLP/attention outputs separately injected? The distinction matters for reproducibility and interpretation. -->
 Single-component patches failed 21,060 times. But what if the problem was _scope_, not _location_? Instead of swapping one component at a time, I tried replacing entire _pathways_, consecutive chunks of the residual stream from one model dropped into another. In a transformer, information flows through the residual stream layer by layer (L2 → L3 → L4 → ...), and each layer reads from and writes to this shared stream. Path patching replaces those activations for multiple consecutive layers at once.
 
+Scope note: this provides causal evidence for the tested interventions (L2→L9 path family, tested model pairs, and IPD prompts), not universal proof across all models, tasks, or pathways.
+
 I tested three types of path: full residual (attention + MLP), MLP-only, and attention-only. Then I did progressive patching from L2→L2, then L2→L3, then L2→L4, and so on, to find where the effect saturates.
+
+In implementation terms, attention-only patching intervenes on `hook_attn_out`, so causal effects can appear even when coarse final-token attention-weight summaries look similar.
 
 ![Progressive Path Patching](./blog_bundle_write_up/progressive_patch_comparison.png)
 
@@ -740,7 +741,7 @@ graph TD
 
     %% Final Conclusions
     Exp1 -- Finds deep routing<br>hubs at L16/L17<br>(Washout Effect) --> Conclusion(((Conclusion:<br>Deep Attention-Mediated Routing)))
-    Exp2 -- Proves pathway causality<br>& attention dominance --> Conclusion
+    Exp2 -- Provides pathway-level<br>causal evidence & attention dominance --> Conclusion
 
     %% Validation
     Val[Part 5: Validation Check] -. Confirms sequence metrics<br>match actual behavior .-> Conclusion
@@ -785,8 +786,7 @@ Before wrapping up, I want to be clear about what I'm confident in and what I'm 
 - Internal measurements align with actual behavior (100% agreement in validation)
 - The major patterns: L8/L9 MLPs doing opposite things, broad interaction-level rewiring, and 99.99% attention similarity
 - Statistical significance is strong (p < 0.00005 for model separation)
-<!-- TODO: Blocker - Calibration fix: this overstates scope. You have causal evidence for selected pathway/hub interventions, not proof that the entire "network rewiring mechanism" is causal. -->
-- **The network rewiring mechanism is causal** (61.7% cooperation change via path patching, 61.7x larger than single-component effects)
+- **Causal evidence exists for selected hubs/pathways** (steering at L16/L17 and L2→L9 path patching show large effects), but this is not full proof of the entire network-rewiring mechanism.
 - **Routing switches exist in deep layers** (L16/L17 MLPs show 50x more steering effect than L2_MLP)
 - **Attention pathways dominate routing** (3x more effective than MLP pathways in path patching)
 
