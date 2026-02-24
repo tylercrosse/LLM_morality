@@ -48,21 +48,26 @@ Here is a high-level overview of the sequence of experiments, how each one motiv
 
 ```mermaid
 graph TD
-    classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
-    classDef test fill:#e1d5e7,stroke:#9673a6,stroke-width:1px;
-    classDef causal fill:#dae8fc,stroke:#6c8ebf,stroke-width:1px;
+    classDef setup fill:#EFBC82,stroke:#c99a5b,stroke-width:2px,color:#000;
+    classDef investigate fill:#DE9B71,stroke:#b87a54,stroke-width:2px,color:#000;
+    classDef mystery fill:#C67B6F,stroke:#a25d52,stroke-width:2px,color:#fff;
+    classDef test fill:#9E6374,stroke:#7d4d5b,stroke-width:2px,color:#fff;
+    classDef breakthrough fill:#675478,stroke:#4e3f5e,stroke-width:2px,color:#fff;
+    classDef causal fill:#41476B,stroke:#2e3150,stroke-width:2px,color:#fff;
 
     %% High-level narrative arc
-    FT[Part 1: Fine-tuning & Evaluation] --> Mystery{Part 2: The Mystery of Shallow Alignment:<br>Different Behaviors,<br>Nearly Identical Components}
+    FT[Part 1: Fine-tuning & Evaluation] --> Investigate[Part 2: Logit Lens & Attribution]
+    Investigate --> Mystery{{Part 2: The Mystery of Shallow Alignment:<br>Different Behaviors,<br>Nearly Identical Components}}
     Mystery --> Tests[Part 3: Ruling out Localized Circuits:<br>Attention & Probes]
     Tests --> Breakthrough[Part 4: The Breakthrough:<br>Component Interactions]
     Breakthrough --> Mech[Part 5: Causal Tests:<br>Network Rewiring & Deep Routing]
 
     class FT setup;
-    class Mystery feature;
+    class Investigate investigate;
+    class Mystery mystery;
     class Tests test;
-    class Breakthrough,Mech causal;
+    class Breakthrough breakthrough;
+    class Mech causal;
 ```
 
 ## Part 1: Setting the Stage: Fine-tuning and Evaluation
@@ -271,8 +276,9 @@ Before moving on to the next set of experiments, here is where we are in our inv
 
 ```mermaid
 graph TD
-    classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
+    classDef setup fill:#EFBC82,stroke:#c99a5b,stroke-width:2px,color:#000;
+    classDef investigate fill:#DE9B71,stroke:#b87a54,stroke-width:2px,color:#000;
+    classDef mystery fill:#C67B6F,stroke:#a25d52,stroke-width:2px,color:#fff;
 
     %% Base Setup
     FT[Part 1: RL Fine-tuning Reproductions] --> Eval[Part 1: Evaluation Scenarios]
@@ -280,12 +286,13 @@ graph TD
     Eval --> DLA[Part 2: Direct Logit Attribution]
 
     class FT,Eval setup;
+    class LL,DLA investigate;
 
     %% The Mystery
-    LL -- Shows when decisions stabilize --> Mystery{Part 2: The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
+    LL -- Shows when decisions stabilize --> Mystery{{Part 2: The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}}
     DLA -- Shows dominant components,<br>but no suppression --> Mystery
 
-    class Mystery feature;
+    class Mystery mystery;
 ```
 
 ---
@@ -395,12 +402,9 @@ The question became: what about the interactions _between_ components?
 <!-- TODO: Minor - Cut this intermediate mermaid diagram (same rationale as the Part 2 one). Replace with a transition sentence. -->
 ```mermaid
 graph TD
-    classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
-    classDef test fill:#e1d5e7,stroke:#9673a6,stroke-width:1px;
-
-    %% Base Setup
-    class Mystery feature;
+    classDef mystery fill:#C67B6F,stroke:#a25d52,stroke-width:2px,color:#fff;
+    classDef test fill:#9E6374,stroke:#7d4d5b,stroke-width:2px,color:#fff;
+    classDef breakthrough fill:#675478,stroke:#4e3f5e,stroke-width:2px,color:#fff;
 
     %% Hypothesis Testing
     Mystery[Part 2: The Mystery] --> AP[Part 3: Activation Patching]
@@ -408,13 +412,14 @@ graph TD
     Mystery[Part 2: The Mystery] --> Probes[Part 3: Linear Probes]
 
     class AP,Attn,Probes test;
+    class Mystery mystery;
 
     %% Null Results -> New Hypothesis
     AP -- "0 Behavioral Flips:<br>Single components don't control behavior" --> Interact[Part 4: Component Interactions]
     Attn -- "99.99% Identical:<br>They select the same info" --> Interact
     Probes -- "Identical Probes:<br>They represent concepts the same way" --> Interact
 
-    class Interact test;
+    class Interact breakthrough;
 ```
 
 ---
@@ -478,9 +483,12 @@ With the discovery of differing component interactions, our roadmap looks like t
 
 ```mermaid
 graph TD
-    classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
-    classDef test fill:#e1d5e7,stroke:#9673a6,stroke-width:1px;
+    classDef setup fill:#EFBC82,stroke:#c99a5b,stroke-width:2px,color:#000;
+    classDef investigate fill:#DE9B71,stroke:#b87a54,stroke-width:2px,color:#000;
+    classDef mystery fill:#C67B6F,stroke:#a25d52,stroke-width:2px,color:#fff;
+    classDef test fill:#9E6374,stroke:#7d4d5b,stroke-width:2px,color:#fff;
+    classDef breakthrough fill:#675478,stroke:#4e3f5e,stroke-width:2px,color:#fff;
+    classDef causal fill:#41476B,stroke:#2e3150,stroke-width:2px,color:#fff;
 
     %% Base Setup
     FT[Part 1: RL Fine-tuning Reproductions] --> Eval[Part 1: Evaluation Scenarios]
@@ -488,12 +496,13 @@ graph TD
     Eval --> DLA[Part 2: Direct Logit Attribution]
 
     class FT,Eval setup;
+    class LL,DLA investigate;
 
     %% The Mystery
-    LL -- Shows when decisions stabilize --> Mystery{Part 2: The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
+    LL -- Shows when decisions stabilize --> Mystery{{Part 2: The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}}
     DLA -- Shows dominant components,<br>but no suppression --> Mystery
 
-    class Mystery feature;
+    class Mystery mystery;
 
     %% Hypothesis Testing
     Mystery --> AP[Part 3: Activation Patching]
@@ -507,10 +516,10 @@ graph TD
     Attn -- "99.99% Identical:<br>They select the same info" --> Interact
     Probes -- "Identical Probes:<br>They represent concepts the same way" --> Interact
 
-    class Interact test;
+    class Interact breakthrough;
 
     %% The Breakthrough
-    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Part 5: Causal Experiments}
+    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{{Part 5: Causal Experiments}}
 
     class Causal causal;
 ```
@@ -671,12 +680,14 @@ Here is the full roadmap of the investigation, bringing all the experiments and 
 
 ```mermaid
 graph TD
-    classDef setup fill:#f9f9f9,stroke:#666,stroke-width:1px;
-    classDef feature fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
-    classDef test fill:#e1d5e7,stroke:#9673a6,stroke-width:1px;
-    classDef causal fill:#dae8fc,stroke:#6c8ebf,stroke-width:1px;
-    classDef conclusion fill:#d5e8d4,stroke:#82b366,stroke-width:2px;
-    classDef validation fill:#f5f5f5,stroke:#b3b3b3,stroke-width:1px,stroke-dasharray: 5 5;
+    classDef setup fill:#EFBC82,stroke:#c99a5b,stroke-width:2px,color:#000;
+    classDef investigate fill:#DE9B71,stroke:#b87a54,stroke-width:2px,color:#000;
+    classDef mystery fill:#C67B6F,stroke:#a25d52,stroke-width:2px,color:#fff;
+    classDef test fill:#9E6374,stroke:#7d4d5b,stroke-width:2px,color:#fff;
+    classDef breakthrough fill:#675478,stroke:#4e3f5e,stroke-width:2px,color:#fff;
+    classDef causal fill:#41476B,stroke:#2e3150,stroke-width:2px,color:#fff;
+    classDef conclusion fill:#2B2D42,stroke:#1a1b2e,stroke-width:2px,color:#fff;
+    classDef validation fill:#e9e9e9,stroke:#6d6875,stroke-width:1px,stroke-dasharray: 5 5,color:#333;
 
     %% Base Setup
     FT[Part 1: RL Fine-tuning Reproductions] --> Eval[Part 1: Evaluation Scenarios]
@@ -684,29 +695,30 @@ graph TD
     Eval --> DLA[Part 2: Direct Logit Attribution]
 
     class FT,Eval setup;
+    class LL,DLA investigate;
 
     %% The Mystery
-    LL -- Shows when decisions stabilize --> Mystery{Part 2: The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}
+    LL -- Shows when decisions stabilize --> Mystery{{Part 2: The Mystery of Shallow Alignment:<br>Models behave differently,<br>but components & layer<br>trajectories seem identical}}
     DLA -- Shows dominant components,<br>but no suppression --> Mystery
 
-    class Mystery feature;
+    class Mystery mystery;
 
     %% Hypothesis Testing
-    Mystery --> AP[Activation Patching]
-    Mystery --> Attn[Attention Analysis]
-    Mystery --> Probes[Linear Probes]
+    Mystery --> AP[Part 3: Activation Patching]
+    Mystery --> Attn[Part 3: Attention Analysis]
+    Mystery --> Probes[Part 3: Linear Probes]
 
     class AP,Attn,Probes test;
 
     %% Null Results -> New Hypothesis
-    AP -- "0 Behavioral Flips:<br>Single components don't control behavior" --> Interact[Component Interactions]
+    AP -- "0 Behavioral Flips:<br>Single components don't control behavior" --> Interact[Part 4: Component Interactions]
     Attn -- "99.99% Identical:<br>They select the same info" --> Interact
     Probes -- "Identical Probes:<br>They represent concepts the same way" --> Interact
 
-    class Interact test;
+    class Interact breakthrough;
 
     %% The Breakthrough
-    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{Causal Experiments}
+    Interact -- "Discovers Network Rewiring:<br>Different correlation patterns" --> Causal{{Part 5: Causal Experiments}}
 
     class Causal causal;
 
@@ -717,7 +729,7 @@ graph TD
     class Exp1,Exp2 causal;
 
     %% Final Conclusions
-    Exp1 -- Finds deep routing<br>hubs at L16/L17<br>(Washout Effect) --> Conclusion(((Conclusion:<br>Deep Attention-Mediated Routing)))
+    Exp1 -- Finds deep routing<br>hubs at L16/L17<br>(Washout Effect) --> Conclusion([Conclusion:<br>Deep Attention-Mediated Routing])
     Exp2 -- Provides pathway-level<br>causal evidence & attention dominance --> Conclusion
 
     %% Validation
