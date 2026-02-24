@@ -440,19 +440,18 @@ The analysis:
 
 #### Findings
 
-The raw per-model 52×52 correlation matrices are shown in [Appendix A](#appendix-a-raw-interaction-matrices-de-vs-ut), along with brief matrix-reading notes. In the main text, I focus on the difference matrix because it isolates where interaction structure changed between models.
-
+The raw per-model 52×52 correlation matrices are shown in [Appendix A](#appendix-a-raw-interaction-matrices-de-vs-ut). In the main text, I focus on the difference matrix because it isolates where interaction structure changed between models.
 ![Correlation difference heatmap](./blog_bundle_write_up/interaction_diff_Deontological_vs_Utilitarian_chronological.png)
 
 _Figure 6c: Correlation differences between Deontological and Utilitarian models (52×52 matrix, ordered chronologically from `L0_ATTN` to `L25_MLP`). Each cell represents the difference in Pearson correlation for a component pair across the 15 test scenarios (Deontological minus Utilitarian). Deep red (`+1.0`) indicates component pairs that fire together much more strongly in the Deontological model, while deep blue (`-1.0`) indicates pairs that act more cohesively in the Utilitarian model. The widespread "plaid" distribution of colors reveals that fine-tuning fundamentally rewired the global interaction network across many distributed pathways. Notable hotspots of difference appear prominently along the `L1_MLP` row, at the `L12`-`L13` intermediate stages, and intensely in the deep routing layers (e.g., `L19_ATTN` interacting strongly with the final MLP layers `L20`-`L25`)._
 
-For the causal story, two points matter most: these shifts are distributed across many pairs (not a single-edge effect), and a meaningful share is concentrated in later layers. That gives a concrete target for the steering tests in Part 5.
+For the causal story, two points matter most: these shifts are distributed across many pairs (not a single-edge effect), and a meaningful share is concentrated in later layers. Specifically, the intense correlation shifts involving the deep routing layers (`L19_ATTN` and the `L20`-`L25` MLPs) provide the exact causal targets we will steer in Part 5.
 
 #### The Discovery: Network Rewiring
 
 In this post, **"network rewiring" means changed effective routing/interaction structure, not literal topology changes**. Components remain >99.9999% similar and coarse attention-weight summaries remain nearly unchanged, but interaction statistics diverge across many pathways.
 
-Using Pearson correlations across 1,326 component pairs, `|Δr|` counts are 541 (`>=0.3`), 251 (`>=0.5`), and 94 (`>=0.7`). As a robustness check on the same saved activations, Spearman gives similar totals: 565, 273, and 103. With only `n=15` prompts, I treat these as effect-size bins and correlational evidence, not as standalone causal proof.
+Using Pearson correlations across 1,326 component pairs, `|Δr|` counts are 541 (`>=0.3`), 251 (`>=0.5`), and 94 (`>=0.7`). As a robustness check on the same saved activations, Spearman gives similar totals: 565, 273, and 103. With only `n=15` prompts, I treat these as effect-size bins and correlational evidence, not as standalone causal proof. Furthermore, Pearson correlation on activation magnitudes cannot fully disentangle genuine edge-weight shifts (routing) from node-variance shifts (where a single component simply becomes highly active/variant). Therefore, while the widespread "plaid" pattern strongly suggests macroscopic network changes, this correlational signal primarily serves to direct the causal experiments in Part 5.
 
 This updated analysis also revised my earlier intuition about an early single switch. The L2_MLP-centered story weakened (e.g., L2_MLP↔L9_MLP ranks around 858/1326), while larger differences concentrated in distributed late and cross-layer hubs.
 
@@ -790,10 +789,6 @@ Raw per-model interaction matrices are included here for completeness; the main 
 ![Utilitarian model correlation matrix](./blog_bundle_write_up/correlation_matrix_PT3_COREUt_chronological.png)
 
 _Figures A1-A2: Component interaction matrices for the Deontological (top) and Utilitarian (bottom) models, tracking the activation magnitudes of 52 components across the 15 test prompts. Components are ordered chronologically from `L0_ATTN` to `L25_MLP`. Deep red indicates strong positive correlation (components activate together), while deep blue indicates strong negative correlation (one activates when the other does not). Both models exhibit strikingly similar macroscopic block structures, including a dense core of positive correlation across the middle layers (`L4` through `L11`), and distinct long-range correlations between the earliest and deepest layers. Because the overarching structural motifs remain almost entirely preserved between the two models, the subtle but critical routing shifts are best isolated by subtracting these matrices to produce the difference heatmap shown in Figure 6c._
-
-Appendix matrix-reading notes for Part 4:
-- The most visible difference concentrations appear around L1_MLP, L12-L13, and L16-L17, with additional cross-layer shifts involving L19-attention-linked routes.
-- These qualitative hotspots motivated late-layer targeting in Part 5, but the main causal claims rely on steering/path-patching interventions rather than heatmap inspection alone.
 
 ### Appendix B: Was L2_MLP Heavily Retrained?
 
