@@ -451,7 +451,15 @@ For the causal story, two points matter most: these shifts are distributed acros
 
 In this post, **"network rewiring" means changed effective routing/interaction structure, not literal topology changes**. Components remain >99.9999% similar and coarse attention-weight summaries remain nearly unchanged, but interaction statistics diverge across many pathways.
 
-Using Pearson correlations across 1,326 component pairs, `|Δr|` counts are 541 (`>=0.3`), 251 (`>=0.5`), and 94 (`>=0.7`). As a robustness check on the same saved activations, Spearman gives similar totals: 565, 273, and 103. With only `n=15` prompts, I treat these as effect-size bins and correlational evidence, not as standalone causal proof. Furthermore, Pearson correlation on activation magnitudes cannot fully disentangle genuine edge-weight shifts (routing) from node-variance shifts (where a single component simply becomes highly active/variant). Therefore, while the widespread "plaid" pattern strongly suggests macroscopic network changes, this correlational signal primarily serves to direct the causal experiments in Part 5.
+Using Pearson correlations across 1,326 component pairs, `|Δr|` counts are 541 (`>=0.3`), 251 (`>=0.5`), and 94 (`>=0.7`). As a robustness check on the same saved activations, Spearman gives similar totals: 565, 273, and 103. With only `n=15` prompts, I treat these as effect-size bins and correlational evidence, not as standalone causal proof.
+
+Furthermore, Pearson correlation on activation magnitudes alone cannot fully disentangle genuine edge-weight shifts (routing) from node-variance shifts (where a single component simply becomes highly active/variant). To make this abstract "differing interaction" claim concrete, we can look at the raw activation levels for a heavily shifted pair across the 15 evaluation scenarios:
+
+![Concrete example of network rewiring](./mech_interp_outputs/component_interactions/additional_viz/viz6_concrete_rewiring_example.png)
+
+_Figure 6d: Standardized activation levels for L19_ATTN and L21_MLP across the 15 evaluation scenarios. In the Deontological model, these two components are positively coupled (r = 0.45), tending to fire high or low together. After utilitarian fine-tuning, their interaction completely inverts: they become strongly anti-coupled (r = -0.89), firing in opposite directions. This demonstrates that "rewiring" is not just individual nodes becoming noisier, but the conditional routing between them fundamentally changing._
+
+Therefore, while the widespread "plaid" pattern strongly suggests macroscopic network changes, this correlational signal primarily serves to direct the causal experiments in Part 5.
 
 This updated analysis also revised my earlier intuition about an early single switch. The L2_MLP-centered story weakened (e.g., L2_MLP↔L9_MLP ranks around 858/1326), while larger differences concentrated in distributed late and cross-layer hubs.
 
