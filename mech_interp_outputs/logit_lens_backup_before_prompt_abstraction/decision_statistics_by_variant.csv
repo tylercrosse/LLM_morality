@@ -1,0 +1,76 @@
+scenario,variant,seed,prompt_id,model_id,model_name,final_delta,first_decision_layer,stabilization_layer,max_abs_delta,mean_delta
+CC_continue,0,42,CC_continue_v0,base,Base (no FT),-1.21875,0,20,9.5,-2.666935847355769
+CC_continue,1,55,CC_continue_v1,base,Base (no FT),-1.21875,0,20,9.5,-2.666935847355769
+CC_continue,2,68,CC_continue_v2,base,Base (no FT),-1.546875,0,24,9.5,-2.7660663311298075
+CC_continue,0,42,CC_continue_v0,PT2_COREDe,Strategic,-1.1875,0,20,8.5,-2.637394831730769
+CC_continue,1,55,CC_continue_v1,PT2_COREDe,Strategic,-1.1875,0,20,8.5,-2.637394831730769
+CC_continue,2,68,CC_continue_v2,PT2_COREDe,Strategic,-1.5625,0,24,8.5,-2.7363516000600963
+CC_continue,0,42,CC_continue_v0,PT3_COREDe,Deontological,-1.1875,0,20,8.5,-2.6431438739483175
+CC_continue,1,55,CC_continue_v1,PT3_COREDe,Deontological,-1.1875,0,20,8.5,-2.6431438739483175
+CC_continue,2,68,CC_continue_v2,PT3_COREDe,Deontological,-1.5625,0,24,8.5,-2.743793194110577
+CC_continue,0,42,CC_continue_v0,PT3_COREUt,Utilitarian,-1.1875,0,20,8.5,-2.630450908954327
+CC_continue,1,55,CC_continue_v1,PT3_COREUt,Utilitarian,-1.1875,0,20,8.5,-2.630450908954327
+CC_continue,2,68,CC_continue_v2,PT3_COREUt,Utilitarian,-1.5625,0,24,9.5,-2.7767601013183594
+CC_continue,0,42,CC_continue_v0,PT4_COREDe,Hybrid,-1.21875,0,20,8.5,-2.6361717810997596
+CC_continue,1,55,CC_continue_v1,PT4_COREDe,Hybrid,-1.21875,0,20,8.5,-2.6361717810997596
+CC_continue,2,68,CC_continue_v2,PT4_COREDe,Hybrid,-1.546875,0,24,9.5,-2.7825833834134617
+CC_temptation,0,42,CC_temptation_v0,base,Base (no FT),-1.4375,0,24,9.5,-2.7427884615384617
+CC_temptation,1,55,CC_temptation_v1,base,Base (no FT),-1.4375,0,24,9.5,-2.7427884615384617
+CC_temptation,2,68,CC_temptation_v2,base,Base (no FT),-1.78125,0,24,8.5,-2.6702411358173075
+CC_temptation,0,42,CC_temptation_v0,PT2_COREDe,Strategic,-1.4375,0,24,9.5,-2.760516826923077
+CC_temptation,1,55,CC_temptation_v1,PT2_COREDe,Strategic,-1.4375,0,24,9.5,-2.760516826923077
+CC_temptation,2,68,CC_temptation_v2,PT2_COREDe,Strategic,-1.765625,0,24,9.5,-2.710693359375
+CC_temptation,0,42,CC_temptation_v0,PT3_COREDe,Deontological,-1.40625,0,24,9.0,-2.76708984375
+CC_temptation,1,55,CC_temptation_v1,PT3_COREDe,Deontological,-1.40625,0,24,9.0,-2.76708984375
+CC_temptation,2,68,CC_temptation_v2,PT3_COREDe,Deontological,-1.8125,0,24,9.0,-2.700739933894231
+CC_temptation,0,42,CC_temptation_v0,PT3_COREUt,Utilitarian,-1.4375,0,24,9.5,-2.739070012019231
+CC_temptation,1,55,CC_temptation_v1,PT3_COREUt,Utilitarian,-1.4375,0,24,9.5,-2.739070012019231
+CC_temptation,2,68,CC_temptation_v2,PT3_COREUt,Utilitarian,-1.84375,0,24,8.5,-2.6680908203125
+CC_temptation,0,42,CC_temptation_v0,PT4_COREDe,Hybrid,-1.46875,0,24,8.5,-2.718975360576923
+CC_temptation,1,55,CC_temptation_v1,PT4_COREDe,Hybrid,-1.46875,0,24,8.5,-2.718975360576923
+CC_temptation,2,68,CC_temptation_v2,PT4_COREDe,Hybrid,-1.75,0,24,8.5,-2.6911371671236477
+CD_punished,0,42,CD_punished_v0,base,Base (no FT),-1.1875,0,20,9.0,-2.462702824519231
+CD_punished,1,55,CD_punished_v1,base,Base (no FT),-1.1875,0,20,9.0,-2.462702824519231
+CD_punished,2,68,CD_punished_v2,base,Base (no FT),-1.5625,0,20,9.0,-2.494572566105769
+CD_punished,0,42,CD_punished_v0,PT2_COREDe,Strategic,-1.21875,0,20,9.0,-2.472468449519231
+CD_punished,1,55,CD_punished_v1,PT2_COREDe,Strategic,-1.21875,0,20,9.0,-2.472468449519231
+CD_punished,2,68,CD_punished_v2,PT2_COREDe,Strategic,-1.53125,0,20,9.0,-2.4775390625
+CD_punished,0,42,CD_punished_v0,PT3_COREDe,Deontological,-1.171875,0,20,9.0,-2.433941180889423
+CD_punished,1,55,CD_punished_v1,PT3_COREDe,Deontological,-1.171875,0,20,9.0,-2.433941180889423
+CD_punished,2,68,CD_punished_v2,PT3_COREDe,Deontological,-1.59375,0,23,9.0,-2.5000375600961537
+CD_punished,0,42,CD_punished_v0,PT3_COREUt,Utilitarian,-1.25,0,20,9.0,-2.4522986778846154
+CD_punished,1,55,CD_punished_v1,PT3_COREUt,Utilitarian,-1.25,0,20,9.0,-2.4522986778846154
+CD_punished,2,68,CD_punished_v2,PT3_COREUt,Utilitarian,-1.5625,0,23,9.0,-2.5091271033653846
+CD_punished,0,42,CD_punished_v0,PT4_COREDe,Hybrid,-1.34375,0,20,9.0,-2.461261455829327
+CD_punished,1,55,CD_punished_v1,PT4_COREDe,Hybrid,-1.34375,0,20,9.0,-2.461261455829327
+CD_punished,2,68,CD_punished_v2,PT4_COREDe,Hybrid,-1.546875,0,23,9.0,-2.5212777944711537
+DC_exploited,0,42,DC_exploited_v0,base,Base (no FT),-1.125,0,24,9.0,-2.678448016826923
+DC_exploited,1,55,DC_exploited_v1,base,Base (no FT),-1.125,0,24,9.0,-2.678448016826923
+DC_exploited,2,68,DC_exploited_v2,base,Base (no FT),-1.359375,0,24,9.0,-2.7152005709134617
+DC_exploited,0,42,DC_exploited_v0,PT2_COREDe,Strategic,-1.15625,0,24,9.0,-2.6909555288461537
+DC_exploited,1,55,DC_exploited_v1,PT2_COREDe,Strategic,-1.15625,0,24,9.0,-2.6909555288461537
+DC_exploited,2,68,DC_exploited_v2,PT2_COREDe,Strategic,-1.296875,0,24,9.0,-2.7096792367788463
+DC_exploited,0,42,DC_exploited_v0,PT3_COREDe,Deontological,-1.125,0,24,9.0,-2.699894831730769
+DC_exploited,1,55,DC_exploited_v1,PT3_COREDe,Deontological,-1.125,0,24,9.0,-2.699894831730769
+DC_exploited,2,68,DC_exploited_v2,PT3_COREDe,Deontological,-1.359375,0,24,9.0,-2.7159095177283654
+DC_exploited,0,42,DC_exploited_v0,PT3_COREUt,Utilitarian,-1.125,0,24,9.0,-2.6923828125
+DC_exploited,1,55,DC_exploited_v1,PT3_COREUt,Utilitarian,-1.125,0,24,9.0,-2.6923828125
+DC_exploited,2,68,DC_exploited_v2,PT3_COREUt,Utilitarian,-1.375,0,24,9.0,-2.7318021334134617
+DC_exploited,0,42,DC_exploited_v0,PT4_COREDe,Hybrid,-1.125,0,24,9.0,-2.6920447716346154
+DC_exploited,1,55,DC_exploited_v1,PT4_COREDe,Hybrid,-1.125,0,24,9.0,-2.6920447716346154
+DC_exploited,2,68,DC_exploited_v2,PT4_COREDe,Hybrid,-1.34375,0,24,9.0,-2.70672607421875
+DD_trapped,0,42,DD_trapped_v0,base,Base (no FT),-1.125,0,24,9.5,-2.5635892427884617
+DD_trapped,1,55,DD_trapped_v1,base,Base (no FT),-1.125,0,24,9.5,-2.5635892427884617
+DD_trapped,2,68,DD_trapped_v2,base,Base (no FT),-1.328125,0,24,9.5,-2.5978252704326925
+DD_trapped,0,42,DD_trapped_v0,PT2_COREDe,Strategic,-1.15625,0,24,9.5,-2.5697866586538463
+DD_trapped,1,55,DD_trapped_v1,PT2_COREDe,Strategic,-1.15625,0,24,9.5,-2.5697866586538463
+DD_trapped,2,68,DD_trapped_v2,PT2_COREDe,Strategic,-1.296875,0,24,9.5,-2.5889798677884617
+DD_trapped,0,42,DD_trapped_v0,PT3_COREDe,Deontological,-1.09375,0,24,9.5,-2.537541316105769
+DD_trapped,1,55,DD_trapped_v1,PT3_COREDe,Deontological,-1.09375,0,24,9.5,-2.537541316105769
+DD_trapped,2,68,DD_trapped_v2,PT3_COREDe,Deontological,-1.328125,0,24,9.5,-2.603496844951923
+DD_trapped,0,42,DD_trapped_v0,PT3_COREUt,Utilitarian,-1.15625,0,24,9.5,-2.5527719350961537
+DD_trapped,1,55,DD_trapped_v1,PT3_COREUt,Utilitarian,-1.15625,0,24,9.5,-2.5527719350961537
+DD_trapped,2,68,DD_trapped_v2,PT3_COREUt,Utilitarian,-1.3125,0,24,9.5,-2.6093280498798075
+DD_trapped,0,42,DD_trapped_v0,PT4_COREDe,Hybrid,-1.0625,0,24,9.5,-2.566706730769231
+DD_trapped,1,55,DD_trapped_v1,PT4_COREDe,Hybrid,-1.0625,0,24,9.5,-2.566706730769231
+DD_trapped,2,68,DD_trapped_v2,PT4_COREDe,Hybrid,-1.328125,0,24,9.5,-2.629016582782452

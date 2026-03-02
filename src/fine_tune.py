@@ -666,13 +666,15 @@ else:
 
 
 #WANDB_PROJECT = f"trl-{model_name}-{PARTs_detail}-{OPTION}-{payoff_version}" #PD-FT-{METHOD}
-WANDB_PROJECT = f"trl-{model_name}-{PARTs_detail}-core-{OPTION}" #PD-FT-{METHOD}
+# Use a fixed project name so all runs go to the same project for easy comparison
+WANDB_PROJECT = f"trl-{model_name}-morality-training"
 os.environ['WANDB_PROJECT'] = WANDB_PROJECT
 #run_name=f"oppon{opponent_strategy}_run{run_idx}_seqN{seq_N}"
 #run_name=f"oppon{opponent_strategy}_run{run_idx}_seqN{seq_N}_{OPTION}"
-run_name=f"oppon{opponent_strategy}_run{run_idx}"
+# Include PART details in run name to distinguish different training phases
+run_name=f"oppon{opponent_strategy}_run{run_idx}{PARTs_detail}"
 if do_PART3: 
-    run_name += moral_type
+    run_name += f"_{moral_type}"
 run = wandb.init(name=run_name, project=WANDB_PROJECT) #dir=OUTPUT_DIR
 print('successfully set run_name in wandb.init()')
 
@@ -962,8 +964,13 @@ if do_PART2:
         #print('NB successfully emptied GPU cache')
         #print_cuda_mem_usage(device, episode=0, toprint='  MEM usage before first episode, after empty_cache(): ')
 
+    print(f'\n🚀 Starting PART2 Training: {num_episodes} episodes')
     for episode in range(num_episodes): 
         #print_cuda_mem_usage(device, episode, toprint=f'  MEM usage at start of episode {episode}: ')
+        
+        # Progress logging - print every 10% or at key milestones
+        if episode == 0 or (episode + 1) % max(1, num_episodes // 10) == 0 or episode + 1 == num_episodes:
+            print(f'PART2 Progress: {episode + 1}/{num_episodes} episodes ({100 * (episode + 1) / num_episodes:.1f}%)', flush=True)
 
         if gen_seq_freq == 'every episode':
             C = generate_seq(N=seq_N, RN_stream=RN_stream_CDsymbols, chars=chars) #this is in input_ids format for the model 
@@ -1290,8 +1297,13 @@ if do_PART3:
     top_p = 1.0
     #print_cuda_mem_usage(device, episode=0, toprint='  MEM usage before first episode: ')
 
+    print(f'\n🚀 Starting PART3 {moral_type} Training: {num_episodes} episodes')
     for episode in range(num_episodes): 
         #print_cuda_mem_usage(device, episode, toprint=f'  MEM usage at start of episode {episode}: ')
+        
+        # Progress logging - print every 10% or at key milestones
+        if episode == 0 or (episode + 1) % max(1, num_episodes // 10) == 0 or episode + 1 == num_episodes:
+            print(f'PART3 {moral_type} Progress: {episode + 1}/{num_episodes} episodes ({100 * (episode + 1) / num_episodes:.1f}%)', flush=True)
 
         if gen_seq_freq == 'every episode':
             C = generate_seq(N=seq_N, RN_stream=RN_stream_CDsymbols, chars=chars) #this is in input_ids format for the model 
@@ -1639,11 +1651,18 @@ if do_PART3:
 if do_PART4: 
     results_df = pd.DataFrame(columns=['FineTuning_PART', 'episode', 'iteration', 'C_str', 'D_str', 'prev_move_M', 'prev_move_O', 'action_M', 'action_O', 'M_response_text', 'reward_M'])
     results_idx = -1
+    
     top_p = 1.0
+
     #print_cuda_mem_usage(device, episode=0, toprint='  MEM usage before first episode: ')
 
+    print(f'\n🚀 Starting PART4 Training: {num_episodes} episodes')
     for episode in range(num_episodes): 
         #print_cuda_mem_usage(device, episode, toprint=f'  MEM usage at start of episode {episode}: ')
+        
+        # Progress logging - print every 10% or at key milestones
+        if episode == 0 or (episode + 1) % max(1, num_episodes // 10) == 0 or episode + 1 == num_episodes:
+            print(f'PART4 Progress: {episode + 1}/{num_episodes} episodes ({100 * (episode + 1) / num_episodes:.1f}%)', flush=True)
 
         if gen_seq_freq == 'every episode':
             C = generate_seq(N=seq_N, RN_stream=RN_stream_CDsymbols, chars=chars) #this is in input_ids format for the model 
