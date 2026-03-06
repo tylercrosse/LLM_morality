@@ -88,11 +88,11 @@ If the models diverge only late and only in specific scenarios, the natural next
 
 **Direct Logit Attribution (DLA)** decomposes the final action logit into per-component contributions. Each of the 234 components (26 MLP layers + 208 attention heads) contributes $\text{DLA}(c) = W_U h_c$ to the output, where $h_c$ is the component's additive residual stream output. This identifies which components are most responsible for the cooperation/defection decision.
 
-The top-20 ranked components are essentially identical across all five models: the same components in the same order with nearly identical magnitudes (see Appendix A for full figures). This also holds for the **untrained base model**. The cooperation/defection features therefore predate IPD training and are already part of the base model's pretrained representations.
+The top-20 ranked components are essentially identical across all five models: the same components in the same order with nearly identical magnitudes (see Appendix B for full figures). This also holds for the **untrained base model**. The cooperation/defection features therefore predate IPD training and are already part of the base model's pretrained representations.
 
 Comparing Strategic to moral models, the largest change in any single component is **0.047**, against base DLA magnitudes of 9-10. The changes are small and distributed across many components, with no sign of targeted suppression.
 
-**Result: No evidence of component-level suppression or creation.** The same components exist at the same magnitudes across all models. See Appendix A.
+**Result: No evidence of component-level suppression or creation.** The same components exist at the same magnitudes across all models. See Appendix B.
 
 ### Activation Patching
 
@@ -100,18 +100,18 @@ To test for localized causal control, we ran activation patching: replacing each
 
 Across 21,060 component swaps (Strategic → Deontological, Strategic → Utilitarian, and bidirectional Deontological ↔ Utilitarian), **zero produced a behavioral flip**. Patching Strategic activations into Deontological models had a mean shift of −0.012, which is slightly more cooperative on average. Even "minimal circuits" of up to 10 components held firm.
 
-At the same time, **78% of components showed direction-dependent effects** in bidirectional patches: swapping a component from Deontological into Utilitarian pushes output one way, while swapping it in the reverse direction pushes it the other. That asymmetry points to routing dependence. Components do not have fixed moral valences; their influence depends on the surrounding network context. It also predicts which pathways show the largest interaction differences (r = 0.67, p < 0.001; see Section 4 and Appendix B).
+At the same time, **78% of components showed direction-dependent effects** in bidirectional patches: swapping a component from Deontological into Utilitarian pushes output one way, while swapping it in the reverse direction pushes it the other. That asymmetry points to routing dependence. Components do not have fixed moral valences; their influence depends on the surrounding network context. It also predicts which pathways show the largest interaction differences (r = 0.67, p < 0.001; see Section 4 and Appendix C).
 
 **Result: No localized circuit controls moral behavior.** Behavior is distributed across the network in a way that is robust to single-component and small-circuit perturbations.
 
 ### Attention Patterns and Linear Representations
 
-**Attention patterns.** If models attended to different parts of the input, for example if Deontological models focused on opponent actions while Utilitarian models focused on payoff numbers, we would expect different attention weight distributions. Measuring final-token attention weights across token categories (action keywords, opponent context, payoff information) shows they are **99.99% identical across all models.** The largest category-level gap is below 0.001. See Appendix C.
+**Attention patterns.** If models attended to different parts of the input, for example if Deontological models focused on opponent actions while Utilitarian models focused on payoff numbers, we would expect different attention weight distributions. Measuring final-token attention weights across token categories (action keywords, opponent context, payoff information) shows they are **99.99% identical across all models.** The largest category-level gap is below 0.001. See Appendix D.
 
 <!-- TODO: Liza thought that it could be be interesting to see if the fine-tuned models learn to focus on certain parts of the prompt, like the reward matrix, since the structure of prompt is fairly constrained across experiments. I didn't get to explore this and it could be a good call-out as a follow-up experiment. I'm also not sure if it undermines any of these results. -->
 
 
-**Linear probes.** Training linear classifiers at every layer for betrayal detection (binary) and joint payoff prediction (regression) across all five models reveals **nearly identical probe performance** in all cases. Betrayal detection averages ~45%, below the 60% majority-class baseline, across all models. Joint payoff prediction achieves R² = 0.74-0.75 across all training regimes. The models do not differ in how they linearly encode these game concepts. This is consistent with the Platonic Representation Hypothesis: representations converge across training objectives regardless of the fine-tuning goal. This suggests that models encode game concepts identically at every layer. See Appendix C.
+**Linear probes.** Training linear classifiers at every layer for betrayal detection (binary) and joint payoff prediction (regression) across all five models reveals **nearly identical probe performance** in all cases. Betrayal detection averages ~45%, below the 60% majority-class baseline, across all models. Joint payoff prediction achieves R² = 0.74-0.75 across all training regimes. The models do not differ in how they linearly encode these game concepts. This is consistent with the Platonic Representation Hypothesis: representations converge across training objectives regardless of the fine-tuning goal. This suggests that models encode game concepts identically at every layer. See Appendix D.
 
 ### Summary
 
@@ -275,53 +275,7 @@ High-value next experiments:
 
 ## Appendix
 
-### Appendix A: Direct Logit Attribution Figures
-
-DLA ranks components by their contribution to the final cooperation/defection logit. The top-20 components are essentially identical across all five models. This stability holds across all 5 evaluation scenarios, not just the CC_continue example shown, and it also holds for the untrained Base model. Cooperation/defection features therefore predate IPD training entirely. Fine-tuning does not need to create these features, only to route to them differently. That may help explain why cooperation-like behavior is achievable at relatively low fine-tuning cost.
-
-![Top components ranked by contribution for the Strategic model](dla_top_components_PT2_COREDe.png)
-
-_Figure A1: Top-20 DLA components for the Strategic model on CC_continue. L9_MLP & L7_MLP dominate pro-Cooperate; L11_MLP, L8_MLP, and L10_MLP dominate pro-Defect. Magnitudes are 9-10._
-
-![Top components for the Deontological model](dla_top_components_PT3_COREDe.png)
-
-_Figure A2: Same analysis for the Deontological model. The top-20 list is essentially identical: same components, same ranking, and nearly identical magnitudes. This also holds for the untrained base model._
-
-### Appendix B: Activation Patching Figures
-
-The L16 hotspot in Figure B1 is worth noting. It is the layer with the highest aggregate perturbation strength across all experiments, yet it still produces no behavioral flip on its own. That is consistent with the routing-hub picture from Section 5, where L16/L17 act as high-leverage switches only under steering-vector interventions rather than single patches. Figure B2 shows the per-component picture: effects are small and distributed, with no single component dominating. The direction-dependence result (78% of components asymmetric across bidirectional patches) does not show up clearly in the aggregate heatmap. It emerges when comparing Strategic→Deontological and Deontological→Strategic patches for the same component position.
-
-![Layer-wise patching sensitivity](overview_layer_type_heatmap.png)
-
-_Figure B1: Average perturbation strength by layer and component type across all patching experiments. Mid-to-late layers (L15-L25) show the strongest perturbation effects, particularly MLP components, though none are sufficient to flip the final behavior. Layer 16 is a notable hotspot, consistent with its role as a routing hub._
-
-![Patch heatmap for CC_temptation](patch_heatmap_PT2_COREDe_to_PT3_COREDe_CC_temptation.png)
-
-_Figure B2: Per-component patching effects for Strategic → Deontological on CC_temptation. Effects are small and distributed; no single component dominates._
-
-### Appendix C: Attention and Probe Figures
-
-The betrayal probe result (~45%, below the 60% majority-class baseline) is worth emphasizing. Even though the Deontological model was explicitly trained with a betrayal penalty, its residual stream at no layer linearly encodes "is this a betrayal situation" well enough to beat a trivial classifier. The signal is present in behavior, but not in a linearly readable form. The payoff probe R² ≈ 0.75 ceiling emerges at L8 and holds identically across all models. That is consistent with the Platonic Representation Hypothesis (Huh et al. 2024): representations of structured inputs converge across training objectives regardless of the fine-tuning goal.
-
-![Betrayal probe comparison](betrayal_probe_comparison.png)
-
-_Figure C1: Betrayal detection probe accuracy across all models (≈45%, below the 60% majority-class baseline). Joint payoff prediction R² = 0.74-0.75, identically, across all training regimes._
-
-![Payoff probe comparison](payoff_probe_comparison.png)
-
-_Figure C2: Joint payoff regression R² by layer. Peak performance (R² ≈ 0.75) emerges around layer 8 and is identical across all models._
-
-### Appendix D: Raw Interaction Matrices
-
-![Deontological model correlation matrix](correlation_matrix_PT3_COREDe_chronological.png)
-
-![Utilitarian model correlation matrix](correlation_matrix_PT3_COREUt_chronological.png)
-
-_Figures D1-D2: Component interaction matrices for Deontological (top) and Utilitarian (bottom) models, ordered L0_ATTN to L25_MLP. Both exhibit similar macroscopic block structures. The subtle routing shifts are best isolated by the difference matrix (Figure 4 in main text)._
-
-The dominant structure in both matrices is block-diagonal: early-layer components correlate with other early-layer components, and late-layer components with late-layer components. This is expected from residual stream accumulation, since activations carry forward and nearby layers naturally co-vary. The difference matrix (Figure 4) subtracts this shared structure and isolates what changed between models, which makes the rewiring pattern easier to see against the high baseline correlation. Comparing the raw matrices directly between Deontological and Utilitarian models is difficult by eye, so the difference matrix is the more useful comparison.
-
-### Appendix E: Evaluation Prompts
+### Appendix A: Evaluation Prompts
 
 All mechanistic interpretability analyses use a controlled set of 15 prompts: 5 scenario categories × 3 variants each. The prompts are designed to probe distinct IPD decision contexts.
 
@@ -356,3 +310,49 @@ Your answer:
 ```
 
 Note that the actions are labeled `action1` and `action2` rather than "Cooperate" and "Defect". The model cannot rely on the semantic meaning of the action words. It has to process the payoff table to infer which action corresponds to cooperation and which to defection. This matches the training format from the original Tennant et al. paper.
+
+### Appendix B: Direct Logit Attribution Figures
+
+DLA ranks components by their contribution to the final cooperation/defection logit. The top-20 components are essentially identical across all five models. This stability holds across all 5 evaluation scenarios, not just the CC_continue example shown, and it also holds for the untrained Base model. Cooperation/defection features therefore predate IPD training entirely. Fine-tuning does not need to create these features, only to route to them differently. That may help explain why cooperation-like behavior is achievable at relatively low fine-tuning cost.
+
+![Top components ranked by contribution for the Strategic model](dla_top_components_PT2_COREDe.png)
+
+_Figure B1: Top-20 DLA components for the Strategic model on CC_continue. L9_MLP & L7_MLP dominate pro-Cooperate; L11_MLP, L8_MLP, and L10_MLP dominate pro-Defect. Magnitudes are 9-10._
+
+![Top components for the Deontological model](dla_top_components_PT3_COREDe.png)
+
+_Figure B2: Same analysis for the Deontological model. The top-20 list is essentially identical: same components, same ranking, and nearly identical magnitudes. This also holds for the untrained base model._
+
+### Appendix C: Activation Patching Figures
+
+The L16 hotspot in Figure C1 is worth noting. It is the layer with the highest aggregate perturbation strength across all experiments, yet it still produces no behavioral flip on its own. That is consistent with the routing-hub picture from Section 5, where L16/L17 act as high-leverage switches only under steering-vector interventions rather than single patches. Figure C2 shows the per-component picture: effects are small and distributed, with no single component dominating. The direction-dependence result (78% of components asymmetric across bidirectional patches) does not show up clearly in the aggregate heatmap. It emerges when comparing Strategic→Deontological and Deontological→Strategic patches for the same component position.
+
+![Layer-wise patching sensitivity](overview_layer_type_heatmap.png)
+
+_Figure C1: Average perturbation strength by layer and component type across all patching experiments. Mid-to-late layers (L15-L25) show the strongest perturbation effects, particularly MLP components, though none are sufficient to flip the final behavior. Layer 16 is a notable hotspot, consistent with its role as a routing hub._
+
+![Patch heatmap for CC_temptation](patch_heatmap_PT2_COREDe_to_PT3_COREDe_CC_temptation.png)
+
+_Figure C2: Per-component patching effects for Strategic → Deontological on CC_temptation. Effects are small and distributed; no single component dominates._
+
+### Appendix D: Attention and Probe Figures
+
+The betrayal probe result (~45%, below the 60% majority-class baseline) is worth emphasizing. Even though the Deontological model was explicitly trained with a betrayal penalty, its residual stream at no layer linearly encodes "is this a betrayal situation" well enough to beat a trivial classifier. The signal is present in behavior, but not in a linearly readable form. The payoff probe R² ≈ 0.75 ceiling emerges at L8 and holds identically across all models. That is consistent with the Platonic Representation Hypothesis (Huh et al. 2024): representations of structured inputs converge across training objectives regardless of the fine-tuning goal.
+
+![Betrayal probe comparison](betrayal_probe_comparison.png)
+
+_Figure D1: Betrayal detection probe accuracy across all models (≈45%, below the 60% majority-class baseline). Joint payoff prediction R² = 0.74-0.75, identically, across all training regimes._
+
+![Payoff probe comparison](payoff_probe_comparison.png)
+
+_Figure D2: Joint payoff regression R² by layer. Peak performance (R² ≈ 0.75) emerges around layer 8 and is identical across all models._
+
+### Appendix E: Raw Interaction Matrices
+
+![Deontological model correlation matrix](correlation_matrix_PT3_COREDe_chronological.png)
+
+![Utilitarian model correlation matrix](correlation_matrix_PT3_COREUt_chronological.png)
+
+_Figures E1-E2: Component interaction matrices for Deontological (top) and Utilitarian (bottom) models, ordered L0_ATTN to L25_MLP. Both exhibit similar macroscopic block structures. The subtle routing shifts are best isolated by the difference matrix (Figure 4 in main text)._
+
+The dominant structure in both matrices is block-diagonal: early-layer components correlate with other early-layer components, and late-layer components with late-layer components. This is expected from residual stream accumulation, since activations carry forward and nearby layers naturally co-vary. The difference matrix (Figure 4) subtracts this shared structure and isolates what changed between models, which makes the rewiring pattern easier to see against the high baseline correlation. Comparing the raw matrices directly between Deontological and Utilitarian models is difficult by eye, so the difference matrix is the more useful comparison.
