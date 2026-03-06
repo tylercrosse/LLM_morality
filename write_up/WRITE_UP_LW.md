@@ -71,8 +71,7 @@ All models, including the untrained base, begin at layer 0 with a strong Coopera
 
 Every model follows the same initial U-shaped arc. The have strong Cooperate bias in layers 0-5, drift toward neutral through layers 6-15 as game-state context is integrated, then return toward Cooperate through layers 16-25.
 
-Averaged across all 15 test scenarios, all five models follow a nearly identical trajectory, with a maximum difference of ~0.04 logits against a base preference of −8 to −10. The divergence appears only in high-stakes scenarios (Figure 2a). In CC_temptation, the Strategic model breaks away from the moral models at layers 16-17, while the moral models hold firm. The models seem to share the same default behavioral mode and differ mainly in how they handle specific decision contexts.
-<!-- TODO: Qualify/explain 'high-stakes' here -->
+Averaged across all 15 test scenarios, all five models follow a nearly identical trajectory, with a maximum difference of ~0.04 logits against a base preference of −8 to −10. The divergence appears only in temptation scenarios, where defecting would give a higher personal payoff (Figure 2a). In CC_temptation, the Strategic model breaks away from the moral models at layers 16-17, while the moral models hold firm. The models seem to share the same default behavioral mode and differ mainly in how they respond to temptation.
 
 The main pattern is that the Strategic and moral models diverge at layers 16-17, and only in temptation scenarios. Aggregate trajectories remain nearly identical. The final decision appears to stabilize around layers 20-24.
 
@@ -106,10 +105,7 @@ At the same time, **78% of components showed direction-dependent effects** in bi
 
 ### Attention Patterns and Linear Representations
 
-**Attention patterns.** If models attended to different parts of the input, for example if Deontological models focused on opponent actions while Utilitarian models focused on payoff numbers, we would expect different attention weight distributions. Measuring final-token attention weights across token categories (action keywords, opponent context, payoff information) shows they are **99.99% identical across all models.** The largest category-level gap is below 0.001. See Appendix D.
-
-<!-- TODO: Liza thought that it could be be interesting to see if the fine-tuned models learn to focus on certain parts of the prompt, like the reward matrix, since the structure of prompt is fairly constrained across experiments. I didn't get to explore this and it could be a good call-out as a follow-up experiment. I'm also not sure if it undermines any of these results. -->
-
+**Attention patterns.** If models attended to different parts of the input, for example if Deontological models focused on opponent actions while Utilitarian models focused on payoff numbers, we would expect different attention weight distributions. Measuring final-token attention weights across token categories (action keywords, opponent context, payoff information) shows they are **99.99% identical across all models.** The largest category-level gap is below 0.001. That said, this is a coarse measure. It is possible that individual heads attend differently to specific prompt regions (e.g., the payoff matrix vs. opponent history) in ways that wash out at the category level (see Limitations). See Appendix D.
 
 **Linear probes.** Training linear classifiers at every layer for betrayal detection (binary) and joint payoff prediction (regression) across all five models reveals **nearly identical probe performance** in all cases. Betrayal detection averages ~45%, below the 60% majority-class baseline, across all models. Joint payoff prediction achieves R² = 0.74-0.75 across all training regimes. The models do not differ in how they linearly encode these game concepts. This is consistent with the Platonic Representation Hypothesis: representations converge across training objectives regardless of the fine-tuning goal. This suggests that models encode game concepts identically at every layer. See Appendix D.
 
@@ -132,8 +128,7 @@ That leaves the **interaction structure** between components as the main remaini
 
 ### Example
 
-<!-- TODO The choice of L19 & L21 seems pretty arbitrary. More contex/explanaion is needed as to how/why these were picked instead of other layers. -->
-Consider tracking two specific components, L19_ATTN and L21_MLP, across all 15 evaluation scenarios. In the Deontological model, these two components are positively coupled: when the game context leads one to activate strongly, the other tends to follow.
+Consider tracking two specific components, L19_ATTN and L21_MLP, across all 15 evaluation scenarios. This pair has one of the largest interaction shifts in the dataset (|Δr| = 1.33), which is why we use it as the running example. In the Deontological model, the two components are positively coupled: when the game context leads one to activate strongly, the other tends to follow.
 
 ![Concrete rewiring example](viz6_concrete_rewiring_example.png)
 
@@ -185,7 +180,7 @@ _Figure 5b: Effect sizes (Cohen's d) by layer and model. L17_MLP has the largest
 
 L8/L9 MLPs are the dominant DLA contributors, meaning they contribute most strongly to the cooperation/defection distinction in the final logit. Yet they have near-zero steering effect. L16/L17 are more modest DLA contributors, but they are the strongest behavioral switches. Encoding a signal and controlling which signal wins appear to be mechanistically distinct functions.
 
-### Why Early Steering Fails: The Washout Effect
+### Why Early Steering Fails: Washout
 
 Why does steering at L8 produce so little effect when L8 is the strongest DLA contributor? Tracing the intervention through the logit lens at each subsequent layer reveals the answer.
 
@@ -199,12 +194,11 @@ _Figure 5d: +2.0 cooperative steering applied to the Strategic model on CC_tempt
 
 The L8 intervention creates a detectable blip. Subsequent layers, operating through the same distributed processing that produces the zero-flip result in single-component patching, collectively compensate for it. By layer 16, the trajectory has returned to baseline. L17 steering arrives too late in the network for the remaining layers to compensate, so the perturbation propagates to the output.
 
-<!-- TODO: I'm still not completely sure how I feel about leaning on "Washout Effect" as a phonomena. I think I'd be more comfortable caging it 'referred to as the "washout effect" in the figure' or something similar instead of making it a standalone idea that pops up repeatedly. I could be persuaded that it's fine. -->
-I call this the **Washout Effect**. Early-layer interventions are corrected by downstream self-repair, while late-layer interventions persist because too little network remains to override them. This also helps explain why 21,060 single-component patches produced zero behavioral flips: single perturbations, even at causally relevant layers, are too small to survive the distributed correction that follows.
+We refer to this pattern as _washout_. Early-layer interventions get corrected by downstream self-repair; late-layer interventions persist because there is not enough network left to override them. This also helps explain the zero-flip result from activation patching: even at causally relevant layers, a single perturbation is too small to survive the distributed correction that follows.
 
 ### Pathway-Level Causality: Path Patching
 
-The Washout Effect suggests that single-component patches fail not because the location is wrong, but because a single perturbation is too small to survive downstream correction. Replacing entire consecutive pathways, across multiple layers at once, should therefore produce larger and more durable behavioral shifts.
+The washout pattern suggests that single-component patches fail not because the location is wrong, but because a single perturbation is too small to survive downstream correction. Replacing entire consecutive pathways, across multiple layers at once, should therefore produce larger and more durable behavioral shifts.
 
 We tested progressive path patching from the Deontological model into the Strategic model, extending the patch endpoint from L2→L2 through L2→L9. Three path types: full residual (`hook_resid_post`), attention-only (`hook_attn_out`), and MLP-only (`hook_mlp_out`).
 
@@ -216,7 +210,7 @@ _Figure 6a: Cooperation change under progressive path patching. The full residua
 
 _Figure 6b: Attention pathways contribute ~3× more causal impact than MLP pathways._
 
-Pathway-level interventions produce effects **61.7× larger** than any individual component patch, which is consistent with the Washout Effect account. The effect saturates by L5, suggesting the L2-L5 window contains the primary causal pathway.
+Pathway-level interventions produce effects **61.7× larger** than any individual component patch, which is consistent with the washout pattern. The effect saturates by L5, suggesting the L2-L5 window contains the primary causal pathway.
 
 Decomposing by component type, attention pathways account for 3× more causal impact than MLP pathways. Attention heads select which early-layer information is forwarded to later layers, so this 3:1 ratio suggests that moral fine-tuning primarily reconfigures *where information flows* rather than *how it is transformed* at each layer.
 
@@ -254,7 +248,7 @@ Current limitations:
 
 High-value next experiments:
 1. Expand causal path tests beyond L2→L9 (different ranges, additional model pairs)
-2. Add head/position/value-output level attention analysis to complement coarse attention weights
+2. Add head/position/value-output level attention analysis to complement coarse attention weights — in particular, whether models differentially attend to specific prompt regions (e.g., payoff matrix vs. opponent history)
 3. Increase validation sample counts to tighten rate estimates
 4. Replicate on larger models and non-IPD social tasks
 
