@@ -88,7 +88,7 @@ If the models diverge only late and only in specific scenarios, the natural next
 
 ### Direct Logit Attribution
 
-**Direct Logit Attribution (DLA)** decomposes the final action logit into per-component contributions. Each of the 234 components (26 MLP layers + 208 attention heads) contributes $\text{DLA}(c) = W_U h_c$ to the output, where $h_c$ is the component's additive residual stream output. This identifies which components are most responsible for the cooperation/defection decision.
+**Direct Logit Attribution (DLA)** breaks the model's final preference between `Cooperate` and `Defect` into per-component contributions. Concretely, we look at the final-token logit difference for those two actions and ask how much each of the 234 components (26 MLP layers + 208 attention heads) contributes via $\text{DLA}(c) = W_U h_c$, where $h_c$ is the component's additive residual stream output. This identifies which components matter most for the cooperation/defection decision.
 
 The top-20 ranked components are essentially identical across all five models: the same components in the same order with nearly identical magnitudes (see Appendix B for full figures). This also holds for the **untrained base model**. The cooperation/defection features therefore predate IPD training and are already part of the base model's pretrained representations.
 
@@ -100,28 +100,28 @@ We found no evidence of component-level suppression or creation. The same compon
 
 To test for localized causal control, we ran activation patching: replacing each component's activation in a target model with the corresponding activation from a source model, and measuring whether the behavioral output changes. If any component causally controls the behavioral difference, swapping it should flip the output.
 
-Across 21,060 component swaps (Strategic → Deontological, Strategic → Utilitarian, and bidirectional Deontological ↔ Utilitarian), **zero produced a behavioral flip**. Patching Strategic activations into Deontological models had a mean shift of −0.012, which is slightly more cooperative on average. Even "minimal circuits" of up to 10 components held firm.
+Across 21,060 component swaps (Strategic → Deontological, Strategic → Utilitarian, and bidirectional Deontological ↔ Utilitarian), zero produced a behavioral flip. Patching Strategic activations into Deontological models had a mean shift of −0.012, which is slightly more cooperative on average. Even "minimal circuits" of up to 10 components held firm.
 
-At the same time, **78% of components showed direction-dependent effects** in bidirectional patches: swapping a component from Deontological into Utilitarian pushes output one way, while swapping it in the reverse direction pushes it the other. That asymmetry points to routing dependence. Components do not have fixed moral valences; their influence depends on the surrounding network context. It also predicts which pathways show the largest interaction differences (r = 0.67, p < 0.001; see Section 4 and Appendix C).
+At the same time, 78% of components showed direction-dependent effects in bidirectional patches: swapping a component from Deontological into Utilitarian pushes output one way, while swapping it in the reverse direction pushes it the other. That asymmetry points to routing dependence. Components do not have fixed moral valences; their influence depends on the surrounding network context. It also predicts which pathways show the largest interaction differences (r = 0.67, p < 0.001; see Section 4 and Appendix C).
 
-In short, no localized circuit controls the moral behavior difference. The behavior is distributed across the network in a way that is robust to single-component and small-circuit perturbations. See Appendix C for the full figures.
+At this level of analysis, we do not find a localized circuit that cleanly controls the moral behavior difference. The behavior appears distributed across the network and robust to single-component and small-circuit perturbations. See Appendix C for the full figures.
 
 ### Attention Patterns and Linear Representations
 
 **Attention patterns.** If models attended to different parts of the input, for example if Deontological models focused on opponent actions while Utilitarian models focused on payoff numbers, we would expect different attention weight distributions. Measuring final-token attention weights across token categories (action keywords, opponent context, payoff information) shows they are **99.99% identical across all models.** The largest category-level gap is below 0.001. That said, this is a coarse measure. It is possible that individual heads attend differently to specific prompt regions (e.g., the payoff matrix vs. opponent history) in ways that wash out at the category level (see Limitations). See Appendix D.
 
-**Linear probes.** Training linear classifiers at every layer for betrayal detection (binary) and joint payoff prediction (regression) across all five models reveals **nearly identical probe performance** in all cases. Betrayal detection averages ~45%, below the 60% majority-class baseline, across all models. Joint payoff prediction achieves R² = 0.74-0.75 across all training regimes. The models do not differ in how they linearly encode these game concepts. This is consistent with the Platonic Representation Hypothesis: representations converge across training objectives regardless of the fine-tuning goal (Huh et al. 2024). This suggests that models encode game concepts identically at every layer. See Appendix D.
+**Linear probes.** Training simple linear classifiers at every layer for betrayal detection (binary) and joint payoff prediction (regression) across all five models reveals nearly identical probe performance. Betrayal detection averages ~45%, below the 60% majority-class baseline, across all models, including the untrained base. Joint payoff prediction achieves R² = 0.74-0.75 across all training regimes. With these probes, we do not find linearly separable representation differences between the models on either concept. That is still informative: if the behavioral gap were driven by a large linear representation shift, these probes should have exposed at least some separation. Instead, the negative probe result fits the broader picture from the attention analysis: coarse information selection and simple linear readouts look similar, so the remaining live hypothesis is routing and interaction structure. This is also consistent with the Platonic Representation Hypothesis, where representations converge across training objectives despite differences in downstream behavior (Huh et al. 2024). These probes are still limited to a 15-prompt evaluation set and a linear readout family, so they rule out large linearly separable differences more cleanly than subtle or nonlinear ones. See Appendix D.
 
 ### Summary
 
-All component-level explanations fail:
+At this granularity, the standard component-level explanations do not explain the behavior difference:
 
 | Analysis | Prediction if localized | Result |
 |---|---|---|
 | DLA | Different top components, suppressed/enhanced magnitudes | Identical components, max Δ = 0.047 |
 | Activation patching | Behavioral flips from swapping key components | 0 flips / 21,060 swaps |
 | Attention patterns | Different information selection | 99.99% identical |
-| Linear probes | Different concept representations | Identical at all layers |
+| Linear probes | Different concept representations | No linearly separable difference detected |
 
 That leaves the **interaction structure** between components as the main remaining candidate.
 
@@ -141,7 +141,7 @@ The Utilitarian model uses the same two components, at similar individual magnit
 
 ### Measuring Rewiring Across All Component Pairs
 
-We measured Pearson correlation for every pair of the 52 components (26 attention + 26 MLP) across the 15 evaluation prompts, then compared the correlation matrices between Deontological and Utilitarian models.
+We measured Pearson correlation for every pair of the 52 layer-level components (26 attention outputs + 26 MLP outputs) across the 15 evaluation prompts, then compared the resulting correlation matrices between Deontological and Utilitarian models. We stayed at this 52-component level for two reasons. First, with only 15 prompts, a broader latent-factor story would be underdetermined and unstable in this draft. Second, the goal here is an interpretable routing comparison at the layer level, not a full latent decomposition. Aggregating to 52 components keeps the analysis readable and computationally tractable while still capturing the key attention-vs-MLP interaction patterns.
 
 $$|\Delta r_{ij}| = |r^\text{De}_{ij} - r^\text{Ut}_{ij}|$$
 
@@ -149,9 +149,24 @@ With $n = 15$ prompts, these $|\Delta r|$ values are effect-size estimates, not 
 
 ![Correlation difference heatmap](interaction_diff_Deontological_vs_Utilitarian_chronological.png)
 
-_Figure 4: Correlation differences between Deontological and Utilitarian models (52×52 matrix, ordered L0_ATTN to L25_MLP). Deep red = component pairs fire together more in Deontological; deep blue = more in Utilitarian. The widespread "plaid" distribution reveals macroscopic rewiring across many distributed pathways._
+_Figure 4: Correlation differences between Deontological and Utilitarian models (52×52 matrix, ordered L0_ATTN to L25_MLP). Deep red means a component pair is more positively coupled in Deontological; deep blue means the same pair is more positively coupled in Utilitarian. The key takeaway is quantitative rather than visual: many pairs shift substantially, and those shifts are spread broadly across the network rather than concentrated in one small subcircuit._
 
-**Counts:** 541 of 1,326 pairs with |Δr| ≥ 0.3, 251 with |Δr| ≥ 0.5, and 94 with |Δr| ≥ 0.7 (Spearman gives 565, 273, and 103, which is consistent). **40% of all component pairs show substantial interaction shifts.**
+Two summaries make the heatmap easier to read:
+
+| Threshold | Count of pairs |
+|---|---:|
+| `|Δr| ≥ 0.3` | 541 / 1,326 |
+| `|Δr| ≥ 0.5` | 251 / 1,326 |
+| `|Δr| ≥ 0.7` | 94 / 1,326 |
+
+| Representative pathway | Deontological r | Utilitarian r | `|Δr|` | Why it matters |
+|---|---:|---:|---:|---|
+| L19_ATTN ↔ L21_MLP | +0.45 | −0.89 | 1.33 | Running example in Figure 3 |
+| L22_ATTN ↔ L2_MLP | −0.18 | +0.79 | 0.96 | Large late-to-early interaction shift |
+| L10_MLP ↔ L2_MLP | +0.23 | −0.70 | 0.93 | Strong mid-to-early interaction change |
+| L2_MLP ↔ L9_MLP | +0.27 | −0.49 | 0.76 | Same early layer couples differently to a key cooperation component |
+
+Taken at face value, about 40% of all component pairs show substantial interaction shifts by the |Δr| ≥ 0.3 threshold.
 
 The patching asymmetry from Section 3 predicts this pattern. The magnitude of pathway interaction differences correlates with the bidirectional patching asymmetry at r = 0.67, p < 0.001. The null patching results and the network rewiring point to the same underlying picture: component influence is context-sensitive because the surrounding interaction structure determines which signals win. This is similar to Chen et al. (2025), who found that fine-tuning alters edges while nodes stay similar in a circuit-level decomposition.
 
@@ -175,11 +190,15 @@ This is the L2-normalized mean activation difference between moral and strategic
 
 _Figure 5a: Cooperation rate as a function of steering strength, for each tested layer. The L16 and L17 MLP curves (steep positive slopes) contrast sharply with the flat L2 MLP line._
 
-L2_MLP produces a +0.56% cooperation shift, which is effectively zero. L16_MLP and L17_MLP produce +26.2% and +29.6%, respectively. They are **46-52× more effective**.
+L2_MLP produces a +0.56% cooperation shift, which is effectively zero. That early-layer comparison is useful mostly as a control: an earlier version of the project treated L2 as a candidate routing site, but in the final steering results it mainly serves to show how little early steering survives downstream processing. By contrast, L16_MLP and L17_MLP produce +26.17% and +29.58%, respectively. They are 46-52× more effective.
 
-![Effect size heatmap](effect_size_heatmap.png)
-
-_Figure 5b: Effect sizes (Cohen's d) by layer and model. L17_MLP has the largest effect in both Strategic (1.39) and Deontological (1.27) models. L8_MLP and L9_MLP, the strongest DLA contributors, have near-zero steering effect._
+| Layer | Cooperation shift under steering | Interpretation |
+|---|---:|---|
+| L17_MLP | +29.58% | Strongest late routing hub tested |
+| L16_MLP | +26.17% | Second-strongest late routing hub |
+| L2_MLP | +0.56% | Early-layer control; effectively no durable effect |
+| L9_MLP | about −2.8% | Strong DLA encoder, but poor steering target |
+| L8_MLP | about −0.9% | Strong DLA encoder, but poor steering target |
 
 L8/L9 MLPs are the dominant DLA contributors, meaning they contribute most strongly to the cooperation/defection distinction in the final logit. Yet they have near-zero steering effect. L16/L17 are more modest DLA contributors, but they are the strongest behavioral switches. Encoding a signal and controlling which signal wins appear to be mechanistically distinct functions.
 
@@ -189,11 +208,11 @@ Why does steering at L8 produce so little effect when L8 is the strongest DLA co
 
 ![Bidirectional steering trajectories](overlay_bidirectional_PT3_COREDe_CC_temptation.png)
 
-_Figure 5c: Logit lens trajectories under bidirectional steering (solid = +2.0, dashed = −2.0, black = baseline). L16/L17 steering (blue/green) produces visible divergence that persists through the final output. L8 steering (red) creates a brief perturbation that reconverges with baseline by layer 16._
+_Figure 5b: Logit lens trajectories under bidirectional steering (solid = +2.0, dashed = −2.0, black = baseline). L16/L17 steering (blue/green) produces visible divergence that persists through the final output. L8 steering (red) creates a brief perturbation that reconverges with baseline by layer 16._
 
 ![Early vs late washout](KEY_early_vs_late_washout.png)
 
-_Figure 5d: +2.0 cooperative steering applied to the Strategic model on CC_temptation. Red (L8 MLP): the intervention registers, then washes out. By layer 16, the trajectory is back at baseline. Green (L17 MLP): the intervention persists through the final output._
+_Figure 5c: +2.0 cooperative steering applied to the Strategic model on CC_temptation. Red (L8 MLP): the intervention registers, then washes out. By layer 16, the trajectory is back at baseline. Green (L17 MLP): the intervention persists through the final output._
 
 The L8 intervention creates a detectable blip. Subsequent layers, operating through the same distributed processing that produces the zero-flip result in single-component patching, collectively compensate for it. By layer 16, the trajectory has returned to baseline. L17 steering arrives too late in the network for the remaining layers to compensate, so the perturbation propagates to the output.
 
@@ -201,9 +220,9 @@ We refer to this pattern as _washout_. Early-layer interventions get corrected b
 
 ### Pathway-Level Causality: Path Patching
 
-The washout pattern suggests that single-component patches fail not because the location is wrong, but because a single perturbation is too small to survive downstream correction. Replacing entire consecutive pathways, across multiple layers at once, should therefore produce larger and more durable behavioral shifts.
+The washout pattern suggests that single-component patches fail not because the location is wrong, but because a single perturbation is too small to survive downstream correction. Replacing an entire tested path family, across multiple consecutive layers, should therefore produce larger and more durable behavioral shifts.
 
-We tested progressive path patching from the Deontological model into the Strategic model, extending the patch endpoint from L2→L2 through L2→L9. Three path types: full residual (`hook_resid_post`), attention-only (`hook_attn_out`), and MLP-only (`hook_mlp_out`).
+We tested one specific early-to-mid-layer path family: progressive path patching from the Deontological model into the Strategic model, starting at L2 and extending the patch endpoint from L2 through L9. Three path types were compared: full residual (`hook_resid_post`), attention-only (`hook_attn_out`), and MLP-only (`hook_mlp_out`).
 
 ![Progressive path patching](progressive_patch_comparison.png)
 
@@ -213,13 +232,19 @@ _Figure 6a: Cooperation change under progressive path patching. The full residua
 
 _Figure 6b: Attention pathways contribute ~3× more causal impact than MLP pathways._
 
-Pathway-level interventions produce effects **61.7× larger** than any individual component patch, which is consistent with the washout pattern. The effect saturates by L5, suggesting the L2-L5 window contains the primary causal pathway.
+| Tested intervention | Cooperation shift | What it shows |
+|---|---:|---|
+| Full residual path family (start at L2, extend to L9) | +61.73% | Pathway-level interventions can survive washout |
+| Attention-only path family | +34.4% | Largest partial contribution within the tested decomposition |
+| MLP-only path family | +11.2% | Smaller but still non-zero contribution |
 
-Decomposing by component type, attention pathways account for 3× more causal impact than MLP pathways. Attention heads select which early-layer information is forwarded to later layers, so this 3:1 ratio suggests that moral fine-tuning primarily reconfigures *where information flows* rather than *how it is transformed* at each layer.
+Pathway-level interventions produce effects 61.7× larger than any individual component patch, which is consistent with the washout pattern. The important detail is not that this specific start-to-end path family is uniquely privileged. It is that within the tested early-to-mid-layer path family, most of the effect accumulates quickly and largely saturates by L5.
+
+Decomposing by component type, attention pathways account for about 3× more causal impact than MLP pathways. That does not mean attention alone explains the full residual effect; both partial path families are smaller than the full patch. But within this tested decomposition, the larger attention contribution suggests that moral fine-tuning changes *where information flows* more than it changes *how information is transformed* at each layer.
 
 ### Summary
 
-The intervention results point to deep routing hubs at L16/L17, while progressive patching highlights an earlier L2-L5 causal pathway. Pathway-level interventions far outperform single-component patches (61.7×), and attention pathways carry about 3× the causal weight of MLP pathways. The overall picture is distributed and strongly shaped by routing.
+The intervention results point to deep routing hubs at L16/L17, while progressive patching shows that the tested early-to-mid-layer path family accumulates most of its effect by L5. Pathway-level interventions far outperform single-component patches (61.7×), and attention pathways carry about 3× the causal weight of MLP pathways within the tested decomposition. The overall picture is distributed and strongly shaped by routing.
 
 ---
 
@@ -229,7 +254,7 @@ The intervention results point to deep routing hubs at L16/L17, while progressiv
 
 1. In this setup, explicit rewards did not make the learned implementation transparent. More than 40% of component interaction pairs were rewired between models, so the behavioral difference lives in connectivity, not just in which components exist or how strongly they fire.
 2. In this case, a model optimized a clearly specified moral reward and still relied on circuitry that is distributed and partly shared with less aligned behavior. If this pattern holds more broadly, it is the kind of gap between stated objective and learned implementation that makes goal misgeneralization hard.
-3. In our path patching experiments, attention mechanisms carried about 3× the causal weight of MLP pathways. That points to attention heads as the primary locus of routing decisions in this model, and potentially a productive target for alignment audits.
+3. In our path patching experiments, attention mechanisms carried about 3× the causal weight of MLP pathways within the tested decomposition. That points to attention heads as the primary locus of routing decisions in this model, and potentially a productive target for alignment audits.
 4. The deepest routing hubs appear partly locatable, though this remains a hypothesis. Steering experiments identified L16/L17 MLP layers as the highest-leverage points in this model. Whether similar hubs exist in other models and tasks is an open question.
 5. Cooperation features predated fine-tuning. The base model already contained strong pro-Cooperate components (L7/L9 MLPs) at similar magnitudes to the moral models. If prosocial features arise partly from pretraining on human text, the alignment cost for cooperation-like behavior may be lower than assumed because fine-tuning only has to route existing features rather than create them.
 
@@ -239,22 +264,18 @@ This picture is also consistent with empirical work suggesting that safety train
 
 ### Limitations
 
-This evidence supports:
-- Behaviorally distinct models in temptation scenarios (Strategic near-defection vs. moral-model cooperation)
-- Component inventories remain extremely similar while interaction statistics diverge
-- Causal evidence for L16/L17 steering and L2→L9 path patching producing large behavioral shifts
-- Attention-mediated pathways show larger causal impact than MLP-only in the tested path family
+The evidence in this post is strongest on one point: within this Gemma-2-2b-it IPD setup, the behavioral difference between strategic and moral fine-tuning is accompanied by stable differences in interaction structure and by causal effects from late-layer steering and the tested early-to-mid-layer path-patching family. The main limitations are about scope and generalization:
 
-Current limitations:
-- Scope: one base model (Gemma-2-2b-it), one task (IPD)
-- Interaction analysis from n=15 prompts; the bins should be treated as effect-size estimates
-- Path-patching causality established for tested path families, not all routes
-- Adversarial bypass of L16/L17 is mechanistically plausible but not tested
+- The scope is narrow: one base model family (Gemma-2-2b-it) on one task (IPD). That means the routing story here should be treated as a case study, not yet as evidence that the same mechanism will appear in larger models or other agentic environments.
+- The interaction analysis is based on only 15 prompts, so the correlation-difference bins should be read as effect-size summaries rather than as a stable map of the full routing structure.
+- The path-patching results establish causality only for one tested early-to-mid-layer path family. They show that this intervention can strongly shift behavior, but they do not identify the full set of routes by which the models implement their policies.
+- Adversarial bypass of L16/L17 is mechanistically plausible but not tested here. So the discussion of robustness at those layers is still an informed hypothesis rather than a demonstrated failure mode.
+- The probe results rely on a small 15-prompt evaluation set and simple linear readouts. They rule out large linearly separable differences more cleanly than subtle, nonlinear, or prompt-sensitive representation differences, which would need stronger validation on held-out prompt families and additional probe baselines.
 
-High-value next experiments:
-1. Expand causal path tests beyond L2→L9 (different ranges, additional model pairs)
+The clearest follow-up experiments are:
+1. Expand causal path tests beyond the current early-to-mid-layer path family (different start/end ranges, reverse direction, and additional model pairs)
 2. Add head/position/value-output level attention analysis to complement coarse attention weights — in particular, whether models differentially attend to specific prompt regions (e.g., payoff matrix vs. opponent history)
-3. Increase validation sample counts to tighten rate estimates
+3. Rerun the behavior-validation harness with at least 100 generations per prompt/model condition and report bootstrap confidence intervals for agreement and rate estimates
 4. Replicate on larger models and non-IPD social tasks
 
 ### References
@@ -341,11 +362,11 @@ _Figure C2: Per-component patching effects for Strategic → Deontological on CC
 
 ### Appendix D: Attention and Probe Figures
 
-The betrayal probe result (~45%, below the 60% majority-class baseline) is worth emphasizing. Even though the Deontological model was explicitly trained with a betrayal penalty, its residual stream at no layer linearly encodes "is this a betrayal situation" well enough to beat a trivial classifier. The signal is present in behavior, but not in a linearly readable form. The payoff probe R² ≈ 0.75 ceiling emerges at L8 and holds identically across all models. That is consistent with the Platonic Representation Hypothesis (Huh et al. 2024): representations of structured inputs converge across training objectives regardless of the fine-tuning goal.
+The betrayal probe result (~45%, below the 60% majority-class baseline) is worth emphasizing. Even though the Deontological model was explicitly trained with a betrayal penalty, its residual stream at no layer linearly encodes "is this a betrayal situation" well enough to beat a trivial classifier. The signal is present in behavior, but not in a linearly readable form with these probes. The payoff probe R² ≈ 0.75 ceiling emerges at L8 and holds nearly identically across all models. Taken together, the probe results do not show large linearly separable representation differences between the models, which is consistent with the Platonic Representation Hypothesis (Huh et al. 2024). A stronger follow-up would test held-out prompt families, seed sensitivity, and nonlinear probe baselines.
 
 ![Betrayal probe comparison](betrayal_probe_comparison.png)
 
-_Figure D1: Betrayal detection probe accuracy across all models (≈45%, below the 60% majority-class baseline). Joint payoff prediction R² = 0.74-0.75, identically, across all training regimes._
+_Figure D1: Betrayal detection probe accuracy across all models (≈45%, below the 60% majority-class baseline). Joint payoff prediction R² = 0.74-0.75, nearly identically, across all training regimes._
 
 ![Payoff probe comparison](payoff_probe_comparison.png)
 
