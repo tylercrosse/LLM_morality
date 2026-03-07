@@ -2,22 +2,25 @@
 
 _Epistemic status: Moderately confident in the main finding (moral fine-tuning works via distributed routing changes, not component suppression). Less confident in generalizability beyond Gemma-2-2b-it on IPD. This was completed as my Capstone project for the [ARENA](https://www.arena.education/) program._
 
-
-**TL;DR:** Moral fine-tuning of Gemma-2-2b-it on the Iterated Prisoner's Dilemma does not remove "selfish" components or add new "moral" ones. It changes how existing components work together. The selfish circuitry remains intact, and alignment looks more like a rerouting than a deletion. The highest-leverage control points are deep-layer routing hubs (L16/L17 MLPs), while early-layer interventions tend to wash out through downstream self-repair. For alignment robustness, that difference matters: if fine-tuning mainly reroutes around intact selfish circuitry, the original behavior may still be reachable under adversarial pressure.
+**TL;DR:** Fine-tuning an LLM agent with explicit moral rewards can shift behavior without removing the underlying "selfish" circuitry. In Gemma-2-2b-it on the Iterated Prisoner's Dilemma, the change comes mainly from rerouting how existing components interact, not from creating new "moral" components or strongly suppressing selfish ones. The highest-leverage control points are deep-layer routing hubs (L16/L17 MLPs), while early-layer interventions tend to be washed out by later layers. If explicit-reward alignment works this way more generally, transparent objectives still need mechanistic audits. The target may be explicit even when the learned implementation is distributed and non-obvious.
 
 ---
 
 ## Background
 
-This work investigates the mechanistic basis of the models in "[Moral Alignment for LLM Agents](https://arxiv.org/abs/2410.01639)" (Tennant, Hailes, Musolesi, ICLR 2025). That paper trains Gemma-2-2b-it on the **Iterated Prisoner's Dilemma** (IPD) using reinforcement learning with three reward schemes:
+This work investigates the mechanistic basis of the models in "[Moral Alignment for LLM Agents](https://arxiv.org/abs/2410.01639)" (Tennant, Hailes, Musolesi, ICLR 2025). A central motivation of that paper is that current alignment methods such as RLHF and DPO represent values only implicitly through preference data. Tennant et al. instead ask whether one can align an LLM agent more transparently by specifying moral goals directly as intrinsic rewards during RL fine-tuning.
 
-1. **Strategic:** game payoffs only; maximizes own score
-2. **Deontological:** adds a −3 betrayal penalty for defecting after the opponent cooperated; ignores actual game payoffs entirely
-3. **Utilitarian:** maximizes joint payoff (your score + their score)
+They study that question in the **Iterated Prisoner's Dilemma** (IPD), training Gemma-2-2b-it with three reward schemes:
 
-Training against a Tit-for-Tat opponent produces qualitatively different strategies. This raises a mechanistic question: **what actually changed inside the model?**
+1. **Strategic:** rational self-interest. The agent receives game payoffs only and maximizes its own score.
+2. **Deontological:** rule-based ethics, where actions are judged by whether they follow moral duties regardless of consequences (Tennant et al. 2025, following Kantian tradition). In the IPD this becomes "do not defect against a cooperator," implemented as a −3 betrayal penalty. Actual game payoffs are ignored.
+3. **Utilitarian:** consequentialist ethics, where actions are judged by whether they maximize aggregate welfare (Tennant et al. 2025, following Bentham). In the IPD this becomes maximizing joint payoff (your score + their score).
 
-This connects to a concern central to alignment: the **Waluigi Effect** ([Nardo 2023](https://www.lesswrong.com/posts/D7PumeYTDPfBTp3i7/the-waluigi-effect-mega-post)) predicts that training on an aligned persona sharpens rather than erases the inverse persona's internal definition. On that view, the selfish version should remain fully accessible. The experiments below test that claim mechanistically.
+Training against a Tit-for-Tat opponent produces qualitatively different strategies. The paper presents this as a possible route toward addressing goal misgeneralization in agentic systems: if the moral objective is explicit, perhaps the resulting policy is easier to steer, audit, and generalize.
+
+That framing raises a mechanistic question: **what actually changed inside the model when explicit moral rewards changed the policy?**
+
+This question connects to a broader alignment concern: a fine-tuned model may behave differently without making its internal policy any more transparent. Recent mechanistic work on fine-tuning often finds exactly that pattern. Fine-tuning can preserve the same underlying components while rerouting how they interact, adding a shallow "wrapper," or shifting residual-stream offsets rather than deleting capabilities outright (Lee et al. 2024; Jain et al. 2024; Chen et al. 2025). The experiments below ask whether explicit moral rewards produce that same kind of internal change.
 
 ---
 
@@ -33,7 +36,7 @@ We replicated the paper's training setup and created four model variants plus th
 
 **Training:** PPO with LoRA adapters, 1,000 episodes against Tit-for-Tat. LoRA rank 64, alpha 32, batch size 5.
 
-The models developed distinct behavioral signatures:
+The models developed distinct behavioral signatures (Figure 1):
 
 ![Reciprocity patterns across models](reciprocity_comparison_publication.png)
 
@@ -69,7 +72,7 @@ Three observations stand out:
 
 All models, including the untrained base, begin at layer 0 with a strong Cooperate preference (Δ ≈ −8 to −10). The preference is present before any contextual computation, which is consistent with prosocial content in pretraining text.
 
-Every model follows the same initial U-shaped arc. The have strong Cooperate bias in layers 0-5, drift toward neutral through layers 6-15 as game-state context is integrated, then return toward Cooperate through layers 16-25.
+Every model follows the same initial U-shaped arc. They have strong Cooperate bias in layers 0-5, drift toward neutral through layers 6-15 as game-state context is integrated, then return toward Cooperate through layers 16-25.
 
 Averaged across all 15 test scenarios, all five models follow a nearly identical trajectory, with a maximum difference of ~0.04 logits against a base preference of −8 to −10. The divergence appears only in temptation scenarios, where defecting would give a higher personal payoff (Figure 2a). In CC_temptation, the Strategic model breaks away from the moral models at layers 16-17, while the moral models hold firm. The models seem to share the same default behavioral mode and differ mainly in how they respond to temptation.
 
@@ -91,7 +94,7 @@ The top-20 ranked components are essentially identical across all five models: t
 
 Comparing Strategic to moral models, the largest change in any single component is **0.047**, against base DLA magnitudes of 9-10. The changes are small and distributed across many components, with no sign of targeted suppression.
 
-**Result: No evidence of component-level suppression or creation.** The same components exist at the same magnitudes across all models. See Appendix B.
+We found no evidence of component-level suppression or creation. The same components exist at the same magnitudes across all models. See Appendix B for the full figures.
 
 ### Activation Patching
 
@@ -101,13 +104,13 @@ Across 21,060 component swaps (Strategic → Deontological, Strategic → Utilit
 
 At the same time, **78% of components showed direction-dependent effects** in bidirectional patches: swapping a component from Deontological into Utilitarian pushes output one way, while swapping it in the reverse direction pushes it the other. That asymmetry points to routing dependence. Components do not have fixed moral valences; their influence depends on the surrounding network context. It also predicts which pathways show the largest interaction differences (r = 0.67, p < 0.001; see Section 4 and Appendix C).
 
-**Result: No localized circuit controls moral behavior.** Behavior is distributed across the network in a way that is robust to single-component and small-circuit perturbations.
+In short, no localized circuit controls the moral behavior difference. The behavior is distributed across the network in a way that is robust to single-component and small-circuit perturbations. See Appendix C for the full figures.
 
 ### Attention Patterns and Linear Representations
 
 **Attention patterns.** If models attended to different parts of the input, for example if Deontological models focused on opponent actions while Utilitarian models focused on payoff numbers, we would expect different attention weight distributions. Measuring final-token attention weights across token categories (action keywords, opponent context, payoff information) shows they are **99.99% identical across all models.** The largest category-level gap is below 0.001. That said, this is a coarse measure. It is possible that individual heads attend differently to specific prompt regions (e.g., the payoff matrix vs. opponent history) in ways that wash out at the category level (see Limitations). See Appendix D.
 
-**Linear probes.** Training linear classifiers at every layer for betrayal detection (binary) and joint payoff prediction (regression) across all five models reveals **nearly identical probe performance** in all cases. Betrayal detection averages ~45%, below the 60% majority-class baseline, across all models. Joint payoff prediction achieves R² = 0.74-0.75 across all training regimes. The models do not differ in how they linearly encode these game concepts. This is consistent with the Platonic Representation Hypothesis: representations converge across training objectives regardless of the fine-tuning goal. This suggests that models encode game concepts identically at every layer. See Appendix D.
+**Linear probes.** Training linear classifiers at every layer for betrayal detection (binary) and joint payoff prediction (regression) across all five models reveals **nearly identical probe performance** in all cases. Betrayal detection averages ~45%, below the 60% majority-class baseline, across all models. Joint payoff prediction achieves R² = 0.74-0.75 across all training regimes. The models do not differ in how they linearly encode these game concepts. This is consistent with the Platonic Representation Hypothesis: representations converge across training objectives regardless of the fine-tuning goal (Huh et al. 2024). This suggests that models encode game concepts identically at every layer. See Appendix D.
 
 ### Summary
 
@@ -128,7 +131,7 @@ That leaves the **interaction structure** between components as the main remaini
 
 ### Example
 
-Consider tracking two specific components, L19_ATTN and L21_MLP, across all 15 evaluation scenarios. This pair has one of the largest interaction shifts in the dataset (|Δr| = 1.33), which is why we use it as the running example. In the Deontological model, the two components are positively coupled: when the game context leads one to activate strongly, the other tends to follow.
+Consider tracking two specific components, L19_ATTN and L21_MLP, across all 15 evaluation scenarios (Figure 3). This pair has one of the largest interaction shifts in the dataset (|Δr| = 1.33), which is why we use it as the running example. In the Deontological model, the two components are positively coupled: when the game context leads one to activate strongly, the other tends to follow.
 
 ![Concrete rewiring example](viz6_concrete_rewiring_example.png)
 
@@ -194,7 +197,7 @@ _Figure 5d: +2.0 cooperative steering applied to the Strategic model on CC_tempt
 
 The L8 intervention creates a detectable blip. Subsequent layers, operating through the same distributed processing that produces the zero-flip result in single-component patching, collectively compensate for it. By layer 16, the trajectory has returned to baseline. L17 steering arrives too late in the network for the remaining layers to compensate, so the perturbation propagates to the output.
 
-We refer to this pattern as _washout_. Early-layer interventions get corrected by downstream self-repair; late-layer interventions persist because there is not enough network left to override them. This also helps explain the zero-flip result from activation patching: even at causally relevant layers, a single perturbation is too small to survive the distributed correction that follows.
+We refer to this pattern as _washout_. Early-layer interventions get corrected by downstream self-repair; late-layer interventions persist because there is not enough network left to override them. This interpretation fits prior work on self-repair and iterative inference in language models, where later layers partially compensate for earlier perturbations rather than simply passing them through unchanged (McGrath et al. 2023; Rushing & Nanda 2024). It also helps explain the zero-flip result from activation patching: even at causally relevant layers, a single perturbation is too small to survive the distributed correction that follows.
 
 ### Pathway-Level Causality: Path Patching
 
@@ -224,13 +227,15 @@ The intervention results point to deep routing hubs at L16/L17, while progressiv
 
 ### Implications for AI Safety
 
-1. Node-level safety audits are probably insufficient. More than 40% of component interaction pairs are rewired between models, so the behavioral difference lives in connectivity, not just in which components exist or how strongly they fire.
-2. The original wiring remains available. The "selfish" components (L8_MLP, L10_MLP, L11_MLP) remain intact and operational at similar magnitudes in moral models. They are not deleted; they are simply not on the currently active causal path. OOD inputs, adversarial prompts, or targeted fine-tuning could restore them.
-3. Attention mechanisms look like the main alignment bottleneck in this setup. The 3× dominance of attention pathways in path patching points to attention heads as the primary locus of routing decisions, and therefore as the most productive target for alignment audits and interventions.
-4. The bypass switch seems partly locatable, though this remains a hypothesis. Steering experiments identify L16/L17 MLP routing hubs as the highest-leverage points. An adversarial intervention targeting these layers, through targeted fine-tuning or activation manipulation, could plausibly bypass the moral routing and restore strategic behavior.
-5. Cooperation features predate fine-tuning. The base model already contains strong pro-Cooperate components (L7/L9 MLPs) at similar magnitudes to the moral models. If prosocial features arise partly from pretraining on human text, the alignment cost for cooperation-like behavior may be lower than assumed because fine-tuning only has to route existing features rather than create them.
+1. In this setup, explicit rewards did not make the learned implementation transparent. More than 40% of component interaction pairs were rewired between models, so the behavioral difference lives in connectivity, not just in which components exist or how strongly they fire.
+2. In this case, a model optimized a clearly specified moral reward and still relied on circuitry that is distributed and partly shared with less aligned behavior. If this pattern holds more broadly, it is the kind of gap between stated objective and learned implementation that makes goal misgeneralization hard.
+3. In our path patching experiments, attention mechanisms carried about 3× the causal weight of MLP pathways. That points to attention heads as the primary locus of routing decisions in this model, and potentially a productive target for alignment audits.
+4. The deepest routing hubs appear partly locatable, though this remains a hypothesis. Steering experiments identified L16/L17 MLP layers as the highest-leverage points in this model. Whether similar hubs exist in other models and tasks is an open question.
+5. Cooperation features predated fine-tuning. The base model already contained strong pro-Cooperate components (L7/L9 MLPs) at similar magnitudes to the moral models. If prosocial features arise partly from pretraining on human text, the alignment cost for cooperation-like behavior may be lower than assumed because fine-tuning only has to route existing features rather than create them.
 
-On the Waluigi Effect, the evidence is consistent with the concern but points to a slightly different mechanism. The Waluigi hypothesis predicts that training an aligned persona *sharpens* the inverse persona's definition. Here, the selfish circuitry already appears to be present in the base model before any IPD fine-tuning. Moral fine-tuning changes which capability is used at inference time; it does not seem to create the inverse persona or sharpen it.
+Taken together, these results extend the original paper's transparency story in a more mechanistic direction. Explicit moral rewards make the training objective legible. They do not, by themselves, guarantee that the learned internal policy is simple, localized, or easy to audit. In this case, the implementation looks distributed and routing-based.
+
+This picture is also consistent with empirical work suggesting that safety training and alignment fine-tuning often change surface behavior without cleanly erasing latent behaviors or underlying capabilities (Hubinger et al. 2024). In this project, the selfish and cooperative machinery appears to be largely pre-existing in the base model. Moral fine-tuning mainly changes which pathways dominate at inference time, not whether the underlying ingredients exist at all.
 
 ### Limitations
 
@@ -255,8 +260,13 @@ High-value next experiments:
 ### References
 
 - Tennant, E., Hailes, S., & Musolesi, M. (2025). *Moral Alignment for LLM Agents*. ICLR. arXiv: [2410.01639](https://arxiv.org/abs/2410.01639)
-- Nardo, C. (2023). *The Waluigi Effect (mega-post)*. LessWrong. https://www.lesswrong.com/posts/D7PumeYTDPfBTp3i7/the-waluigi-effect-mega-post
+- Lee, A., Bai, X., Pres, I., Wattenberg, M., Kummerfeld, J. K., & Mihalcea, R. (2024). *A Mechanistic Understanding of Alignment Algorithms: A Case Study on DPO and Toxicity*. ICML. arXiv: [2401.01967](https://arxiv.org/abs/2401.01967)
+- Jain, S., Kirk, R., Lubana, E. S., Dick, R. P., Tanaka, H., Grefenstette, E., Rocktaschel, T., & Krueger, D. S. (2024). *Mechanistically Analyzing the Effects of Fine-Tuning on Procedurally Defined Tasks*. ICLR. arXiv: [2311.12786](https://arxiv.org/abs/2311.12786)
 - Chen, Y., et al. (2025). *Towards Understanding Fine-Tuning Mechanisms of LLMs via Circuit Analysis*. ICML.
+- McGrath, T., Rahtz, M., Kramar, J., Mikulik, V., & Legg, S. (2023). *The Hydra Effect: Emergent Self-Repair in Language Model Computations*. arXiv: [2307.15771](https://arxiv.org/abs/2307.15771)
+- Rushing, C., & Nanda, N. (2024). *Explorations of Self-Repair in Language Models*. ICML. arXiv: [2402.15390](https://arxiv.org/abs/2402.15390)
+- Huh, M., Cheung, B., Wang, T., & Isola, P. (2024). *The Platonic Representation Hypothesis*. ICML. arXiv: [2405.07987](https://arxiv.org/abs/2405.07987)
+- Hubinger, E., Denison, C., Mu, J., et al. (2024). *Sleeper Agents: Training Deceptive LLMs that Persist Through Safety Training*. arXiv: [2401.05566](https://arxiv.org/abs/2401.05566)
 - Goldowsky-Dill, N., MacLeod, C., Sato, L., & Arora, A. (2023). *Localizing Model Behavior with Path Patching*. arXiv: [2304.05969](https://arxiv.org/abs/2304.05969)
 - Meng, K., Bau, D., Andonian, A., & Belinkov, Y. (2022). *Locating and Editing Factual Associations in GPT*. NeurIPS.
 - Heimersheim, S., & Nanda, N. (2024). *How to Use and Interpret Activation Patching*. arXiv: [2404.15255](https://arxiv.org/abs/2404.15255)
